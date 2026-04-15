@@ -179,6 +179,20 @@
   .overdue-actions button:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
   .overdue-actions .done-btn:hover{background:var(--green);border-color:var(--green)}
   .overdue-actions .custom-date{padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:var(--radius)}
+  /* Company file attachments */
+  .file-section{margin-top:16px}
+  .file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}
+  .file-card{background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);padding:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--ink)}
+  .file-card:hover{border-color:var(--ink-mute);box-shadow:var(--shadow);transform:translateY(-1px)}
+  .file-card-icon{font-size:24px;text-align:center;padding:8px 0}
+  .file-card-name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-card-meta{color:var(--ink-mute);font-size:11px}
+  .file-card-thumb{width:100%;height:80px;object-fit:cover;border-radius:var(--radius);background:var(--line-soft)}
+  .file-upload-zone{border:2px dashed var(--line);border-radius:var(--radius-lg);padding:16px;text-align:center;color:var(--ink-mute);font-size:13px;cursor:pointer;transition:all .15s;margin-top:8px}
+  .file-upload-zone:hover{border-color:var(--accent);color:var(--accent);background:#fef8f5}
+  .file-upload-zone.dragging{border-color:var(--accent);background:#fef8f5}
+  .file-upload-progress{margin-top:6px;font-size:12px;color:var(--ink-mute);display:none}
+  .file-upload-progress.show{display:block}
   .cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px}
   .cal-nav-title{font-family:'Fraunces',serif;font-size:16px;font-weight:600;flex:1;text-align:center}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-height:500px}
@@ -419,6 +433,15 @@
         <div class="visit-list" id="visitList"></div>
         <div class="section-header">Linked tasks<button class="btn btn-sm" onclick="openTaskModalForCompany()">+ Add task</button></div>
         <div class="linked-tasks" id="linkedTasks"></div>
+        <div class="file-section">
+          <div class="section-header">Files &amp; documents</div>
+          <div class="file-grid" id="companyFiles"></div>
+          <div class="file-upload-zone" id="fileDropZone" onclick="document.getElementById('fileUploadInput').click()" ondragover="event.preventDefault();this.classList.add('dragging')" ondragleave="this.classList.remove('dragging')" ondrop="event.preventDefault();this.classList.remove('dragging');handleFileDrop(event)">
+            📁 Click or drag files here to upload<br><span style="font-size:11px">PDFs, images, CAD files, documents</span>
+          </div>
+          <input type="file" id="fileUploadInput" multiple style="display:none" onchange="handleFileUpload(this.files)">
+          <div class="file-upload-progress" id="fileUploadProgress">Uploading...</div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -509,7 +532,7 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events';
+const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file';
 const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks' };
 
 let state = {
@@ -1089,6 +1112,154 @@ async function persistTaskAndRefresh(t, msg){
   } catch(err){ toast('Save failed: ' + err.message, true); }
 }
 
+// ========== GOOGLE DRIVE FILE ATTACHMENTS ==========
+const MAPLE_ROOT_FOLDER_NAME = 'Maple MPSS';
+let mapleRootFolderId = null;
+
+async function driveRequest(url, opts = {}){
+  const r = await fetch(url, {
+    ...opts,
+    headers: { Authorization: 'Bearer ' + accessToken, ...(opts.headers || {}) }
+  });
+  if(!r.ok) throw new Error('Drive API ' + r.status);
+  return r.json();
+}
+
+async function findOrCreateFolder(name, parentId){
+  // Search for existing folder
+  let q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  if(parentId) q += ` and '${parentId}' in parents`;
+  const search = await driveRequest(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`
+  );
+  if(search.files && search.files.length > 0) return search.files[0].id;
+
+  // Create folder
+  const meta = { name, mimeType: 'application/vnd.google-apps.folder' };
+  if(parentId) meta.parents = [parentId];
+  const created = await driveRequest('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(meta)
+  });
+  return created.id;
+}
+
+async function getMapleRootFolder(){
+  if(mapleRootFolderId) return mapleRootFolderId;
+  mapleRootFolderId = await findOrCreateFolder(MAPLE_ROOT_FOLDER_NAME, null);
+  return mapleRootFolderId;
+}
+
+async function getCompanyFolder(companyName){
+  const rootId = await getMapleRootFolder();
+  return await findOrCreateFolder(companyName, rootId);
+}
+
+async function uploadFileToDrive(file, folderId){
+  const metadata = { name: file.name, parents: [folderId] };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', file);
+  const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,thumbnailLink,size,createdTime', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + accessToken },
+    body: form
+  });
+  if(!r.ok) throw new Error('Upload failed: ' + r.status);
+  return await r.json();
+}
+
+async function listFilesInFolder(folderId){
+  const q = `'${folderId}' in parents and trashed=false`;
+  const result = await driveRequest(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,webViewLink,thumbnailLink,size,createdTime)&orderBy=createdTime desc&pageSize=50`
+  );
+  return result.files || [];
+}
+
+function fileIcon(mimeType){
+  if(!mimeType) return '📄';
+  if(mimeType.startsWith('image/')) return '🖼️';
+  if(mimeType.includes('pdf')) return '📕';
+  if(mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊';
+  if(mimeType.includes('document') || mimeType.includes('word')) return '📝';
+  if(mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️';
+  if(mimeType.includes('dwg') || mimeType.includes('dxf') || mimeType.includes('cad') || mimeType.includes('acad')) return '📐';
+  if(mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) return '📦';
+  return '📄';
+}
+
+function formatFileSize(bytes){
+  if(!bytes) return '';
+  const b = Number(bytes);
+  if(b < 1024) return b + ' B';
+  if(b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+
+async function renderCompanyFiles(companyName){
+  const grid = document.getElementById('companyFiles');
+  if(!grid) return;
+  if(!accessToken){ grid.innerHTML = '<div class="empty-mini">Sign in to see files</div>'; return; }
+
+  grid.innerHTML = '<div class="empty-mini" style="font-style:italic">Loading files...</div>';
+  try {
+    const folderId = await getCompanyFolder(companyName);
+    // Store folder ID on the zone for uploads
+    document.getElementById('fileDropZone').dataset.folderId = folderId;
+    const files = await listFilesInFolder(folderId);
+    if(files.length === 0){
+      grid.innerHTML = '<div class="empty-mini">No files yet — upload quotes, drawings, or photos above</div>';
+      return;
+    }
+    grid.innerHTML = files.map(f => {
+      const isImage = f.mimeType && f.mimeType.startsWith('image/');
+      const thumb = isImage && f.thumbnailLink ? `<img class="file-card-thumb" src="${f.thumbnailLink}" alt="">` : `<div class="file-card-icon">${fileIcon(f.mimeType)}</div>`;
+      return `<a class="file-card" href="${f.webViewLink}" target="_blank" rel="noopener" title="Open in Google Drive">
+        ${thumb}
+        <div class="file-card-name">${esc(f.name)}</div>
+        <div class="file-card-meta">${formatFileSize(f.size)}</div>
+      </a>`;
+    }).join('');
+  } catch(e){
+    console.error('Drive list error', e);
+    grid.innerHTML = '<div class="empty-mini">Could not load files</div>';
+  }
+}
+
+async function handleFileUpload(fileList){
+  const files = Array.from(fileList || []);
+  if(files.length === 0) return;
+  const company = state.editingCompany;
+  if(!company){ toast('No company selected', true); return; }
+  if(!accessToken){ toast('Sign in first', true); return; }
+
+  const progress = document.getElementById('fileUploadProgress');
+  progress.classList.add('show');
+
+  try {
+    const folderId = document.getElementById('fileDropZone').dataset.folderId || await getCompanyFolder(company.name);
+    for(let i = 0; i < files.length; i++){
+      progress.textContent = `Uploading ${i+1}/${files.length}: ${files[i].name}...`;
+      await uploadFileToDrive(files[i], folderId);
+    }
+    toast(`${files.length} file${files.length>1?'s':''} uploaded`);
+    await renderCompanyFiles(company.name);
+  } catch(e){
+    console.error('Upload error', e);
+    toast('Upload failed: ' + e.message, true);
+  } finally {
+    progress.classList.remove('show');
+    document.getElementById('fileUploadInput').value = '';
+  }
+}
+
+function handleFileDrop(event){
+  const files = event.dataTransfer?.files;
+  if(files && files.length > 0) handleFileUpload(files);
+}
+
 function setCompanyView(v){
   state.view = v;
   document.getElementById('viewTable').classList.toggle('active', v==='table');
@@ -1171,6 +1342,7 @@ function openCompanyModal(id){
   document.getElementById('cDelete').style.display = id ? 'inline-flex' : 'none';
   document.getElementById('visitSection').style.display = id ? 'block' : 'none';
   if(id) renderVisitsForCompany(id);
+  if(id && c.name) renderCompanyFiles(c.name);
   if(!id) state.editingCompany = c;
   document.getElementById('companyModal').classList.add('open');
   setTimeout(()=>document.getElementById('cName').focus(), 50);
