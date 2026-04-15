@@ -1,3 +1,6 @@
+x · HTML
+Copy
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,8 +25,6 @@
   body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;min-height:100vh;-webkit-font-smoothing:antialiased}
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
   input,select,textarea{font-family:inherit;font-size:14px;color:var(--ink)}
-
-  /* Header */
   .header{border-bottom:1px solid var(--line);padding:18px 24px;position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);background:rgba(245,241,234,.92)}
   .header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
   .brand{display:flex;align-items:baseline;gap:10px}
@@ -36,18 +37,14 @@
   .sync-status.syncing .dot{background:var(--yellow);animation:pulse 1s infinite}
   .sync-status.error .dot{background:var(--red)}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-
-  /* Tabs */
   .tabs{max-width:1400px;margin:0 auto;padding:0 24px;display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto;background:var(--bg);position:sticky;top:65px;z-index:15}
   .tab{padding:12px 16px;background:none;border:none;color:var(--ink-soft);font-size:14px;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:6px}
   .tab:hover{color:var(--ink)}
   .tab.active{color:var(--ink);border-bottom-color:var(--accent)}
   .tab .count{background:var(--bg-sunken);padding:1px 6px;border-radius:10px;font-size:11px;color:var(--ink-soft)}
-
-  /* Main */
+  .tab .alert-dot{display:none;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:4px}
+  .tab .alert-dot.show{display:inline-block}
   .main{max-width:1400px;margin:0 auto;padding:24px}
-
-  /* Buttons */
   .btn{padding:8px 14px;border-radius:var(--radius);font-size:13px;font-weight:500;border:1px solid var(--line);background:var(--bg-card);color:var(--ink);transition:all .15s;display:inline-flex;align-items:center;gap:6px}
   .btn:hover{background:var(--bg-sunken);border-color:var(--ink-mute)}
   .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -57,14 +54,15 @@
   .btn-sm{padding:5px 10px;font-size:12px}
   .btn-danger{color:var(--red);border-color:var(--line)}
   .btn-danger:hover{background:#fef2ee;border-color:var(--red)}
-
-  /* Filters */
   .filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
   .filter-select{padding:7px 28px 7px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%235c5750' stroke-width='1.2' fill='none'/></svg>") no-repeat right 10px center;appearance:none;font-size:13px;color:var(--ink)}
   .search-input{padding:7px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card);min-width:220px;flex:1;max-width:360px}
   .search-input:focus{outline:none;border-color:var(--accent)}
-
-  /* ==================== KANBAN ==================== */
+  .overdue-banner{display:none;align-items:center;justify-content:space-between;gap:12px;background:#fef2ee;border:1px solid #f5c4b4;color:var(--red);padding:10px 14px;border-radius:var(--radius);margin-bottom:14px;font-size:13px;font-weight:500}
+  .overdue-banner.show{display:flex}
+  .overdue-banner-text{display:flex;align-items:center;gap:8px}
+  .overdue-banner button{background:var(--red);color:#fff;border:none;padding:6px 12px;border-radius:var(--radius);font-size:12px;font-weight:500;cursor:pointer}
+  .overdue-banner button:hover{background:#9a3818}
   .kanban{display:grid;grid-template-columns:repeat(4,minmax(260px,1fr));gap:14px;overflow-x:auto;padding-bottom:8px}
   .column{background:var(--bg-sunken);border-radius:var(--radius-lg);padding:12px;min-height:400px;display:flex;flex-direction:column}
   .column-header{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 12px;border-bottom:1px solid var(--line);margin-bottom:10px}
@@ -84,22 +82,22 @@
   .card-title{font-weight:500;margin-bottom:6px;line-height:1.35}
   .card-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--ink-mute);align-items:center}
   .pill{padding:2px 7px;border-radius:10px;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;border:1px solid var(--line)}
-  .pill-priority-Urgent{background:#fef2ee;color:var(--red);border-color:#f5c4b4}
-  .pill-priority-High{background:#fef6e8;color:var(--yellow);border-color:#f0d99b}
-  .pill-priority-Medium{background:#eef3f7;color:var(--blue);border-color:#c4d3e0}
-  .pill-priority-Low{background:var(--bg-sunken);color:var(--ink-soft)}
-  .pill-cat{background:var(--bg-sunken);color:var(--ink-soft);text-transform:none;font-size:11px}
+  .pill-priority-Urgent,.pill-priority-High,.pill-priority-Medium,.pill-priority-Low{background:var(--bg-sunken);color:var(--ink-soft);border-color:var(--line)}
+  .pill-cat{background:var(--bg-sunken);color:var(--ink-soft);text-transform:none;font-size:11px;border-color:var(--line)}
+  .pill-cat-Sales{background:#eef5ee;color:var(--green);border-color:#bdd6bf}
+  .pill-cat-Marketing{background:#f0eaf5;color:var(--purple);border-color:#d6c5e5}
+  .pill-cat-Admin{background:#eef3f7;color:var(--blue);border-color:#c4d3e0}
+  .pill-cat-PR{background:#fef6e8;color:var(--yellow);border-color:#f0d99b}
+  .pill-cat-Personal{background:#fef2ee;color:var(--red);border-color:#f5c4b4}
+  .pill-cat-Learning{background:#f5f0e8;color:#8a6d3b;border-color:#e0d4b8}
+  .pill-cat-Other{background:var(--bg-sunken);color:var(--ink-soft);border-color:var(--line)}
   .pill-company{background:#f0eaf5;color:var(--purple);border-color:#d6c5e5;text-transform:none;font-size:11px}
   .card-date{font-size:11px;color:var(--ink-mute)}
   .card-date.overdue{color:var(--red);font-weight:500}
-
-  /* ==================== COMPANIES ==================== */
   .toolbar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
   .view-toggle{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
   .view-toggle button{padding:6px 12px;background:var(--bg-card);font-size:12px;color:var(--ink-soft)}
   .view-toggle button.active{background:var(--ink);color:#fff}
-
-  /* Company table view */
   .company-table{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
   .company-table table{width:100%;border-collapse:collapse;font-size:13px}
   .company-table th{text-align:left;padding:10px 12px;background:var(--bg-sunken);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);border-bottom:1px solid var(--line);white-space:nowrap}
@@ -109,36 +107,27 @@
   .company-table tr:last-child td{border-bottom:none}
   .company-name-cell{font-weight:500}
   .company-industry{font-size:11px;color:var(--ink-mute)}
-
-  /* Status pills */
   .status-pill{display:inline-block;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;border:1px solid}
   .status-Prospect{background:var(--bg-sunken);color:var(--ink-soft);border-color:var(--line)}
   .status-Visited{background:#eef3f7;color:var(--blue);border-color:#c4d3e0}
   .status-Quoted{background:#fef6e8;color:var(--yellow);border-color:#f0d99b}
   .status-Won{background:#eef5ee;color:var(--green);border-color:#bdd6bf}
   .status-Lost{background:#fef2ee;color:var(--red);border-color:#f5c4b4}
-
-  /* Company cards view */
   .company-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
   .company-card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;cursor:pointer;transition:all .15s}
   .company-card:hover{box-shadow:var(--shadow);border-color:var(--ink-mute);transform:translateY(-1px)}
   .company-card-name{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin-bottom:4px}
   .company-card-industry{font-size:12px;color:var(--ink-mute);margin-bottom:12px}
   .company-card-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-top:8px;color:var(--ink-soft)}
-
-  /* ==================== DASHBOARD ==================== */
   .dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px}
   .stat-card{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px}
   .stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-mute);margin-bottom:6px}
   .stat-value{font-family:'Fraunces',serif;font-size:32px;font-weight:600;line-height:1}
   .stat-sub{font-size:12px;color:var(--ink-mute);margin-top:6px}
-
   .dash-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
   @media(max-width:900px){.dash-row{grid-template-columns:1fr}}
   .dash-panel{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:18px}
   .panel-title{font-family:'Fraunces',serif;font-size:18px;font-weight:600;margin-bottom:14px}
-
-  /* Funnel */
   .funnel{display:flex;flex-direction:column;gap:6px}
   .funnel-row{display:flex;align-items:center;gap:10px}
   .funnel-label{width:80px;font-size:12px;color:var(--ink-soft);font-weight:500}
@@ -149,16 +138,12 @@
   .funnel-fill.Quoted{background:var(--yellow)}
   .funnel-fill.Won{background:var(--green)}
   .funnel-fill.Lost{background:var(--red)}
-
-  /* Activity list */
   .activity-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto}
   .activity-item{display:flex;gap:10px;padding:10px;border-radius:var(--radius);background:var(--bg-sunken)}
   .activity-icon{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px}
   .activity-body{flex:1;min-width:0}
   .activity-title{font-size:13px;font-weight:500;margin-bottom:2px}
   .activity-meta{font-size:11px;color:var(--ink-mute)}
-
-  /* ==================== MODAL ==================== */
   .modal-backdrop{position:fixed;inset:0;background:rgba(26,26,26,.5);backdrop-filter:blur(4px);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto}
   .modal-backdrop.open{display:flex}
   .modal{background:var(--bg-card);border-radius:var(--radius-lg);max-width:720px;width:100%;box-shadow:var(--shadow-lg);max-height:90vh;display:flex;flex-direction:column;margin:auto}
@@ -168,7 +153,6 @@
   .modal-footer{padding:14px 24px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
   .modal-close{padding:6px;color:var(--ink-mute);font-size:18px;line-height:1}
   .modal-close:hover{color:var(--ink)}
-
   .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .form-row.full{grid-column:1/-1}
   .field{display:flex;flex-direction:column;gap:4px}
@@ -176,8 +160,6 @@
   .field input,.field select,.field textarea{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card)}
   .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
   .field textarea{resize:vertical;min-height:60px;font-family:inherit}
-
-  /* Visit log inside company modal */
   .section-header{font-family:'Fraunces',serif;font-size:16px;font-weight:600;margin:24px 0 10px;display:flex;justify-content:space-between;align-items:center}
   .visit-list{display:flex;flex-direction:column;gap:8px}
   .visit-item{background:var(--bg-sunken);border-radius:var(--radius);padding:12px;font-size:13px;position:relative}
@@ -190,146 +172,70 @@
   .linked-tasks{display:flex;flex-direction:column;gap:6px}
   .linked-task{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-sunken);border-radius:var(--radius);font-size:13px;cursor:pointer}
   .linked-task:hover{background:var(--line-soft)}
-
-  /* Setup screen */
+  .overdue-list{display:flex;flex-direction:column;gap:10px;max-height:50vh;overflow-y:auto}
+  .overdue-row{background:var(--bg-sunken);border-radius:var(--radius);padding:12px;display:flex;flex-direction:column;gap:8px}
+  .overdue-row-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .overdue-row-name{font-weight:500;font-size:14px;flex:1}
+  .overdue-row-meta{font-size:11px;color:var(--red);font-weight:500}
+  .overdue-actions{display:flex;flex-wrap:wrap;gap:6px}
+  .overdue-actions button{padding:5px 10px;font-size:12px;border:1px solid var(--line);background:var(--bg-card);border-radius:var(--radius);cursor:pointer;color:var(--ink)}
+  .overdue-actions button:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .overdue-actions .done-btn:hover{background:var(--green);border-color:var(--green)}
+  .overdue-actions .custom-date{padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:var(--radius)}
   .setup{max-width:560px;margin:60px auto;background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:32px;box-shadow:var(--shadow)}
   .setup h2{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin-bottom:6px}
   .setup p{color:var(--ink-soft);margin-bottom:20px;font-size:13px}
   .setup ol{margin:12px 0 20px 18px;color:var(--ink-soft);font-size:13px;line-height:1.7}
   .setup ol li{margin-bottom:4px}
   .setup .field{margin-bottom:14px}
-
-  /* Empty state */
   .empty{text-align:center;padding:60px 20px;color:var(--ink-mute)}
   .empty h3{font-family:'Fraunces',serif;font-size:20px;color:var(--ink-soft);margin-bottom:8px}
-
-  /* Mobile */
   @media(max-width:768px){
-    .header{padding:14px 16px}
-    .brand h1{font-size:20px}
-    .brand .subtitle{display:none}
-    .tabs{padding:0 16px;top:60px}
-    .main{padding:16px}
-    .kanban{grid-template-columns:1fr}
-    .form-grid{grid-template-columns:1fr}
-    .company-table{overflow-x:auto;display:block}
-    .modal-body{padding:16px}
-    .modal-header{padding:14px 16px}
-    .modal-footer{padding:12px 16px;flex-direction:column-reverse}
-    .modal-footer .btn{width:100%;justify-content:center}
+    .header{padding:14px 16px}.brand h1{font-size:20px}.brand .subtitle{display:none}
+    .tabs{padding:0 16px;top:60px}.main{padding:16px}.kanban{grid-template-columns:1fr}
+    .form-grid{grid-template-columns:1fr}.company-table{overflow-x:auto;display:block}
+    .modal-body{padding:16px}.modal-header{padding:14px 16px}
+    .modal-footer{padding:12px 16px;flex-direction:column-reverse}.modal-footer .btn{width:100%;justify-content:center}
   }
-
-  /* Toast */
   .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--radius);font-size:13px;z-index:200;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
   .toast.error{background:var(--red)}
-
-  /* ===== Chat agent ===== */
-  #chatFab {
-    position: fixed; bottom: 20px; right: 20px;
-    width: 56px; height: 56px; border-radius: 50%;
-    background: var(--accent); color: #fff; border: none;
-    font-size: 24px; cursor: pointer; z-index: 90;
-    box-shadow: var(--shadow-lg);
-    display: flex; align-items: center; justify-content: center;
-    transition: transform 0.15s;
-  }
-  #chatFab:hover { transform: scale(1.05); background: #9a3818; }
-  #chatPanel {
-    position: fixed; bottom: 90px; right: 20px;
-    width: 380px; max-width: calc(100vw - 40px);
-    height: 540px; max-height: calc(100vh - 120px);
-    background: var(--bg-card); border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    display: none; flex-direction: column;
-    z-index: 95; overflow: hidden;
-    border: 1px solid var(--line);
-  }
-  #chatPanel.open { display: flex; }
-  #chatHeader {
-    background: var(--ink); color: #fff;
-    padding: 12px 16px; display: flex;
-    justify-content: space-between; align-items: center;
-  }
-  #chatHeader h3 { margin: 0; font-size: 14px; font-weight: 600; font-family: 'Fraunces', serif; font-style: italic; }
-  #chatHeader button { background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0; line-height: 1; }
-  #chatMessages {
-    flex: 1; overflow-y: auto; padding: 12px;
-    display: flex; flex-direction: column; gap: 8px;
-    background: var(--bg);
-  }
-  .chatMsg {
-    padding: 8px 12px; border-radius: var(--radius-lg);
-    max-width: 85%; font-size: 13px; line-height: 1.45;
-    word-wrap: break-word;
-  }
-  .chatMsg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-  .chatMsg.assistant { align-self: flex-start; background: var(--bg-card); color: var(--ink); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
-  .chatMsg.system { align-self: center; background: transparent; color: var(--ink-mute); font-size: 11px; font-style: italic; max-width: 100%; text-align: center; padding: 4px 8px; }
-  .chatMsg.action { align-self: flex-start; background: #eef5ee; color: var(--green); border: 1px solid #bdd6bf; font-size: 12px; border-bottom-left-radius: 4px; }
-  .chatMsg.error  { align-self: flex-start; background: #fef2ee; color: var(--red); border: 1px solid #f5c4b4; font-size: 12px; }
-  #chatInputRow {
-    display: flex; gap: 8px; padding: 10px;
-    border-top: 1px solid var(--line); background: var(--bg-card);
-  }
-  #chatInput {
-    flex: 1; padding: 8px 12px; border: 1px solid var(--line);
-    border-radius: var(--radius); font-size: 13px; resize: none;
-    font-family: inherit; outline: none; min-height: 36px; max-height: 100px;
-    background: var(--bg-card); color: var(--ink);
-  }
-  #chatInput:focus { border-color: var(--accent); }
-  #chatSend {
-    background: var(--accent); color: #fff; border: none;
-    padding: 0 14px; border-radius: var(--radius); cursor: pointer;
-    font-size: 13px; font-weight: 500;
-  }
-  #chatSend:disabled { background: var(--ink-mute); cursor: not-allowed; }
-  #chatAttach {
-    background: var(--bg-sunken); color: var(--ink-soft); border: 1px solid var(--line);
-    padding: 0 10px; border-radius: var(--radius); cursor: pointer;
-    font-size: 16px; display: flex; align-items: center; justify-content: center;
-  }
-  #chatAttach:hover { background: var(--line-soft); color: var(--ink); }
-  #chatPreview {
-    display: none; padding: 8px 10px; gap: 6px; flex-wrap: wrap;
-    border-top: 1px solid var(--line); background: var(--bg-sunken);
-  }
-  #chatPreview.show { display: flex; }
-  .chatPreviewItem {
-    position: relative; width: 48px; height: 48px;
-    border-radius: var(--radius); overflow: hidden;
-    border: 1px solid var(--line);
-  }
-  .chatPreviewItem img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .chatPreviewItem button {
-    position: absolute; top: -4px; right: -4px;
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--ink); color: #fff; font-size: 11px; line-height: 1;
-    padding: 0; cursor: pointer; border: none;
-  }
+  #chatFab{position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:24px;cursor:pointer;z-index:90;box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;transition:transform 0.15s}
+  #chatFab:hover{transform:scale(1.05);background:#9a3818}
+  #chatPanel{position:fixed;bottom:90px;right:20px;width:380px;max-width:calc(100vw - 40px);height:540px;max-height:calc(100vh - 120px);background:var(--bg-card);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);display:none;flex-direction:column;z-index:95;overflow:hidden;border:1px solid var(--line)}
+  #chatPanel.open{display:flex}
+  #chatHeader{background:var(--ink);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+  #chatHeader h3{margin:0;font-size:14px;font-weight:600;font-family:'Fraunces',serif;font-style:italic}
+  #chatHeader button{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1}
+  #chatMessages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--bg)}
+  .chatMsg{padding:8px 12px;border-radius:var(--radius-lg);max-width:85%;font-size:13px;line-height:1.45;word-wrap:break-word}
+  .chatMsg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+  .chatMsg.assistant{align-self:flex-start;background:var(--bg-card);color:var(--ink);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .chatMsg.system{align-self:center;background:transparent;color:var(--ink-mute);font-size:11px;font-style:italic;max-width:100%;text-align:center;padding:4px 8px}
+  .chatMsg.action{align-self:flex-start;background:#eef5ee;color:var(--green);border:1px solid #bdd6bf;font-size:12px;border-bottom-left-radius:4px}
+  .chatMsg.error{align-self:flex-start;background:#fef2ee;color:var(--red);border:1px solid #f5c4b4;font-size:12px}
+  #chatInputRow{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--bg-card)}
+  #chatInput{flex:1;padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius);font-size:13px;resize:none;font-family:inherit;outline:none;min-height:36px;max-height:100px;background:var(--bg-card);color:var(--ink)}
+  #chatInput:focus{border-color:var(--accent)}
+  #chatSend{background:var(--accent);color:#fff;border:none;padding:0 14px;border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:500}
+  #chatSend:disabled{background:var(--ink-mute);cursor:not-allowed}
+  #chatAttach{background:var(--bg-sunken);color:var(--ink-soft);border:1px solid var(--line);padding:0 10px;border-radius:var(--radius);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+  #chatAttach:hover{background:var(--line-soft);color:var(--ink)}
+  #chatPreview{display:none;padding:8px 10px;gap:6px;flex-wrap:wrap;border-top:1px solid var(--line);background:var(--bg-sunken)}
+  #chatPreview.show{display:flex}
+  .chatPreviewItem{position:relative;width:48px;height:48px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line)}
+  .chatPreviewItem img{width:100%;height:100%;object-fit:cover;display:block}
+  .chatPreviewItem button{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;line-height:1;padding:0;cursor:pointer;border:none}
 </style>
 </head>
 <body>
-
-<!-- ============ SETUP SCREEN ============ -->
+ 
 <div id="setupScreen" class="setup" style="display:none">
   <h2>Welcome to Maple MPSS</h2>
   <p>One-time setup. You'll need a Google Cloud OAuth Client ID and a Google Sheet to use as your database.</p>
-
-  <div class="field">
-    <label>Google OAuth Client ID</label>
-    <input id="setupClientId" placeholder="123...apps.googleusercontent.com">
-  </div>
-  <div class="field">
-    <label>Google Sheet ID (the long string in the Sheet URL)</label>
-    <input id="setupSheetId" placeholder="1AbC...XyZ">
-  </div>
-  <div class="field">
-    <label>Google Calendar ID (optional, for task date sync)</label>
-    <input id="setupCalendarId" placeholder="primary or shared-cal-id@group.calendar.google.com">
-  </div>
-
+  <div class="field"><label>Google OAuth Client ID</label><input id="setupClientId" placeholder="123...apps.googleusercontent.com"></div>
+  <div class="field"><label>Google Sheet ID (the long string in the Sheet URL)</label><input id="setupSheetId" placeholder="1AbC...XyZ"></div>
+  <div class="field"><label>Google Calendar ID (optional, for task date sync)</label><input id="setupCalendarId" placeholder="primary or shared-cal-id@group.calendar.google.com"></div>
   <details style="margin-bottom:16px;font-size:13px;color:var(--ink-soft)">
     <summary style="cursor:pointer;font-weight:500;color:var(--ink)">How do I get these?</summary>
     <ol>
@@ -340,19 +246,13 @@
       <li>Add yourself + Dad as Test Users in the OAuth consent screen.</li>
     </ol>
   </details>
-
   <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="saveSetup()">Save & Continue</button>
 </div>
-
-<!-- ============ MAIN APP ============ -->
+ 
 <div id="app" style="display:none">
-
 <header class="header">
   <div class="header-inner">
-    <div class="brand">
-      <h1>Maple MPSS</h1>
-      <span class="subtitle">CRM &amp; Tasks</span>
-    </div>
+    <div class="brand"><h1>Maple MPSS</h1><span class="subtitle">CRM &amp; Tasks</span></div>
     <div class="header-actions">
       <div id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">Not signed in</span></div>
       <button id="signInBtn" class="btn" onclick="googleSignIn()">Sign in with Google</button>
@@ -360,46 +260,45 @@
     </div>
   </div>
 </header>
-
+ 
 <nav class="tabs">
-  <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span></button>
+  <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
 </nav>
-
+ 
 <main class="main">
-
-  <!-- TASKS TAB -->
   <section id="tab-tasks" class="tab-pane">
+    <div class="overdue-banner" id="overdueBanner">
+      <div class="overdue-banner-text"><span>⚠</span><span id="overdueBannerText">0 tasks overdue</span></div>
+      <button onclick="openOverdueModal()">Review &amp; reschedule</button>
+    </div>
     <div class="filters">
+      <div class="view-toggle" id="scopeToggle">
+        <button data-scope="all" class="active" onclick="setTaskScope('all')">All</button>
+        <button data-scope="company" onclick="setTaskScope('company')">🏢 Company</button>
+        <button data-scope="personal" onclick="setTaskScope('personal')">👤 Personal</button>
+      </div>
       <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderKanban()">
-      <select class="filter-select" id="filterCategory" onchange="renderKanban()">
-        <option value="">All categories</option>
-      </select>
+      <select class="filter-select" id="filterCategory" onchange="renderKanban()"><option value="">All categories</option></select>
       <select class="filter-select" id="filterAssignee" onchange="renderKanban()">
-        <option value="">All assignees</option>
-        <option>Son</option><option>Dad</option><option>Both</option>
+        <option value="">All assignees</option><option>Son</option><option>Dad</option><option>Both</option>
       </select>
-      <select class="filter-select" id="filterCompany" onchange="renderKanban()">
-        <option value="">All companies</option>
-      </select>
+      <select class="filter-select" id="filterCompany" onchange="renderKanban()"><option value="">All companies</option></select>
       <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add task</button>
     </div>
     <div class="kanban" id="kanban"></div>
   </section>
-
-  <!-- COMPANIES TAB -->
+ 
   <section id="tab-companies" class="tab-pane" style="display:none">
     <div class="toolbar">
       <div class="filters" style="margin:0">
         <input class="search-input" id="companySearch" placeholder="Search companies…" oninput="renderCompanies()">
         <select class="filter-select" id="filterCompanyStatus" onchange="renderCompanies()">
-          <option value="">All statuses</option>
-          <option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option>
+          <option value="">All statuses</option><option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option>
         </select>
         <select class="filter-select" id="filterCompanyOwner" onchange="renderCompanies()">
-          <option value="">All owners</option>
-          <option>Son</option><option>Dad</option><option>Both</option>
+          <option value="">All owners</option><option>Son</option><option>Dad</option><option>Both</option>
         </select>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -412,78 +311,42 @@
     </div>
     <div id="companiesContainer"></div>
   </section>
-
-  <!-- DASHBOARD TAB -->
+ 
   <section id="tab-dashboard" class="tab-pane" style="display:none">
     <div class="dash-grid" id="statCards"></div>
     <div class="dash-row">
-      <div class="dash-panel">
-        <h3 class="panel-title">Visit funnel</h3>
-        <div class="funnel" id="funnelChart"></div>
-      </div>
-      <div class="dash-panel">
-        <h3 class="panel-title">Recent activity</h3>
-        <div class="activity-list" id="activityList"></div>
-      </div>
+      <div class="dash-panel"><h3 class="panel-title">Visit funnel</h3><div class="funnel" id="funnelChart"></div></div>
+      <div class="dash-panel"><h3 class="panel-title">Recent activity</h3><div class="activity-list" id="activityList"></div></div>
     </div>
     <div class="dash-row">
-      <div class="dash-panel">
-        <h3 class="panel-title">Pipeline by company</h3>
-        <div id="pipelineList"></div>
-      </div>
-      <div class="dash-panel">
-        <h3 class="panel-title">Tasks due this week</h3>
-        <div id="dueThisWeek"></div>
-      </div>
+      <div class="dash-panel"><h3 class="panel-title">Pipeline by company</h3><div id="pipelineList"></div></div>
+      <div class="dash-panel"><h3 class="panel-title">Tasks due this week</h3><div id="dueThisWeek"></div></div>
     </div>
   </section>
-
 </main>
 </div>
-
-<!-- ============ TASK MODAL ============ -->
+ 
 <div class="modal-backdrop" id="taskModal">
   <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title" id="taskModalTitle">New task</div>
-      <button class="modal-close" onclick="closeTaskModal()">✕</button>
-    </div>
+    <div class="modal-header"><div class="modal-title" id="taskModalTitle">New task</div><button class="modal-close" onclick="closeTaskModal()">✕</button></div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="field form-row full">
-          <label>Task name</label>
-          <input id="tName">
-        </div>
-        <div class="field"><label>Status</label>
-          <select id="tStatus"><option>Not started</option><option>In progress</option><option>Done</option><option>Blocked</option></select>
-        </div>
-        <div class="field"><label>Priority</label>
-          <select id="tPriority"><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select>
-        </div>
-        <div class="field"><label>Date</label>
-          <input id="tDate" type="date">
-        </div>
-        <div class="field"><label>Duration (hrs)</label>
-          <input id="tDuration" type="number" step="0.5" min="0">
-        </div>
-        <div class="field"><label>Assignee</label>
-          <select id="tAssignee"><option>Son</option><option>Dad</option><option>Both</option></select>
-        </div>
+        <div class="field form-row full"><label>Task name</label><input id="tName"></div>
+        <div class="field"><label>Status</label><select id="tStatus"><option>Not started</option><option>In progress</option><option>Done</option><option>Blocked</option></select></div>
+        <div class="field"><label>Priority</label><select id="tPriority"><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></div>
+        <div class="field"><label>Date</label><input id="tDate" type="date"></div>
+        <div class="field"><label>Duration (hrs)</label><input id="tDuration" type="number" step="0.5" min="0"></div>
+        <div class="field"><label>Assignee</label><select id="tAssignee"><option>Son</option><option>Dad</option><option>Both</option></select></div>
         <div class="field"><label>Category</label>
-          <select id="tCategory">
-            <option>Job Applications</option><option>AI &amp; PMP Study</option><option>Business Systems</option>
-            <option>LinkedIn &amp; Profile</option><option>Client Outreach</option><option>Maple MPSS</option>
-          </select>
+          <input id="tCategory" list="categoryOptions" placeholder="Sales" autocomplete="off">
+          <datalist id="categoryOptions">
+            <option value="Sales"><option value="Marketing"><option value="Admin">
+            <option value="PR Application"><option value="Personal"><option value="Learning"><option value="Other">
+          </datalist>
         </div>
-        <div class="field form-row full"><label>Linked company (optional)</label>
-          <select id="tCompany"><option value="">— None —</option></select>
-        </div>
-        <div class="field form-row full"><label>Notes</label>
-          <textarea id="tNotes" rows="3"></textarea>
-        </div>
-        <div class="field form-row full"><label>Resources / links</label>
-          <input id="tLinks" placeholder="https://…">
-        </div>
+        <div class="field form-row full"><label>Linked company (optional)</label><select id="tCompany"><option value="">— None —</option></select></div>
+        <div class="field form-row full"><label>Notes</label><textarea id="tNotes" rows="3"></textarea></div>
+        <div class="field form-row full"><label>Resources / links</label><input id="tLinks" placeholder="https://…"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -495,21 +358,15 @@
     </div>
   </div>
 </div>
-
-<!-- ============ COMPANY MODAL ============ -->
+ 
 <div class="modal-backdrop" id="companyModal">
   <div class="modal">
-    <div class="modal-header">
-      <div class="modal-title" id="companyModalTitle">New company</div>
-      <button class="modal-close" onclick="closeCompanyModal()">✕</button>
-    </div>
+    <div class="modal-header"><div class="modal-title" id="companyModalTitle">New company</div><button class="modal-close" onclick="closeCompanyModal()">✕</button></div>
     <div class="modal-body">
       <div class="form-grid">
         <div class="field form-row full"><label>Company name</label><input id="cName"></div>
         <div class="field"><label>Industry</label><input id="cIndustry" placeholder="Packaging machinery"></div>
-        <div class="field"><label>Size</label>
-          <select id="cSize"><option value="">—</option><option>1-10</option><option>11-50</option><option>51-200</option><option>201-500</option><option>500+</option></select>
-        </div>
+        <div class="field"><label>Size</label><select id="cSize"><option value="">—</option><option>1-10</option><option>11-50</option><option>51-200</option><option>201-500</option><option>500+</option></select></div>
         <div class="field form-row full"><label>What they make / do</label><textarea id="cMakes" rows="2"></textarea></div>
         <div class="field form-row full"><label>Address</label><input id="cAddress"></div>
         <div class="field"><label>Contact name</label><input id="cContact"></div>
@@ -517,29 +374,16 @@
         <div class="field"><label>Email</label><input id="cEmail" type="email"></div>
         <div class="field"><label>Website</label><input id="cWebsite" placeholder="https://"></div>
         <div class="field form-row full"><label>LinkedIn URL</label><input id="cLinkedIn" placeholder="https://linkedin.com/company/..."></div>
-        <div class="field"><label>Status</label>
-          <select id="cStatus"><option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option></select>
-        </div>
+        <div class="field"><label>Status</label><select id="cStatus"><option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option></select></div>
         <div class="field"><label>Pipeline value (CAD)</label><input id="cValue" type="number" min="0" step="100"></div>
-        <div class="field"><label>Owner</label>
-          <select id="cOwner"><option>Son</option><option>Dad</option><option>Both</option></select>
-        </div>
+        <div class="field"><label>Owner</label><select id="cOwner"><option>Son</option><option>Dad</option><option>Both</option></select></div>
         <div class="field"><label>Last interaction</label><input id="cLast" type="date"></div>
         <div class="field form-row full"><label>Notes</label><textarea id="cNotes" rows="3"></textarea></div>
       </div>
-
-      <!-- Visit log (only shown when editing existing company) -->
       <div id="visitSection" style="display:none">
-        <div class="section-header">
-          Visit log
-          <button class="btn btn-sm" onclick="openVisitModal()">+ Log visit</button>
-        </div>
+        <div class="section-header">Visit log<button class="btn btn-sm" onclick="openVisitModal()">+ Log visit</button></div>
         <div class="visit-list" id="visitList"></div>
-
-        <div class="section-header">
-          Linked tasks
-          <button class="btn btn-sm" onclick="openTaskModalForCompany()">+ Add task</button>
-        </div>
+        <div class="section-header">Linked tasks<button class="btn btn-sm" onclick="openTaskModalForCompany()">+ Add task</button></div>
         <div class="linked-tasks" id="linkedTasks"></div>
       </div>
     </div>
@@ -552,28 +396,18 @@
     </div>
   </div>
 </div>
-
-<!-- ============ VISIT MODAL ============ -->
+ 
 <div class="modal-backdrop" id="visitModal">
   <div class="modal" style="max-width:520px">
-    <div class="modal-header">
-      <div class="modal-title">Log visit</div>
-      <button class="modal-close" onclick="closeVisitModal()">✕</button>
-    </div>
+    <div class="modal-header"><div class="modal-title">Log visit</div><button class="modal-close" onclick="closeVisitModal()">✕</button></div>
     <div class="modal-body">
       <div class="form-grid">
         <div class="field"><label>Date</label><input id="vDate" type="date"></div>
-        <div class="field"><label>Type</label>
-          <select id="vType"><option>In-person</option><option>Call</option><option>Email</option><option>LinkedIn</option><option>Other</option></select>
-        </div>
-        <div class="field form-row full"><label>Outcome</label>
-          <select id="vOutcome"><option>Positive</option><option>Neutral</option><option>No interest</option><option>Follow-up needed</option><option>Quoted</option></select>
-        </div>
+        <div class="field"><label>Type</label><select id="vType"><option>In-person</option><option>Call</option><option>Email</option><option>LinkedIn</option><option>Other</option></select></div>
+        <div class="field form-row full"><label>Outcome</label><select id="vOutcome"><option>Positive</option><option>Neutral</option><option>No interest</option><option>Follow-up needed</option><option>Quoted</option></select></div>
         <div class="field form-row full"><label>Notes</label><textarea id="vNotes" rows="4" placeholder="What was discussed, who was met, key takeaways…"></textarea></div>
         <div class="field form-row full"><label>Next step</label><input id="vNext" placeholder="Send quote by Friday"></div>
-        <div class="field form-row full"><label>Logged by</label>
-          <select id="vBy"><option>Son</option><option>Dad</option></select>
-        </div>
+        <div class="field form-row full"><label>Logged by</label><select id="vBy"><option>Son</option><option>Dad</option></select></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -585,14 +419,10 @@
     </div>
   </div>
 </div>
-
-<!-- ============ SETTINGS MODAL ============ -->
+ 
 <div class="modal-backdrop" id="settingsModal">
   <div class="modal" style="max-width:520px">
-    <div class="modal-header">
-      <div class="modal-title">Settings</div>
-      <button class="modal-close" onclick="closeSettings()">✕</button>
-    </div>
+    <div class="modal-header"><div class="modal-title">Settings</div><button class="modal-close" onclick="closeSettings()">✕</button></div>
     <div class="modal-body">
       <div class="field"><label>OAuth Client ID</label><input id="setClientId"></div>
       <div class="field"><label>Sheet ID</label><input id="setSheetId"></div>
@@ -610,16 +440,27 @@
     </div>
   </div>
 </div>
-
+ 
+<div class="modal-backdrop" id="overdueModal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header"><div class="modal-title">⚠ Overdue tasks</div><button class="modal-close" onclick="closeOverdueModal()">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--ink-soft);margin-bottom:14px">These tasks are past their due date. Reschedule, mark done, or open to edit.</p>
+      <div class="overdue-list" id="overdueList"></div>
+    </div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" onclick="closeOverdueModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+ 
 <div class="toast" id="toast"></div>
-
-<!-- ============ CHAT AGENT ============ -->
+ 
 <button id="chatFab" title="Maple Assistant">💬</button>
 <div id="chatPanel">
-  <div id="chatHeader">
-    <h3>Maple Assistant</h3>
-    <button id="chatClose" title="Close">×</button>
-  </div>
+  <div id="chatHeader"><h3>Maple Assistant</h3><button id="chatClose" title="Close">×</button></div>
   <div id="chatMessages">
     <div class="chatMsg system">Try: "Add a follow-up task for Edson next Tuesday" — or 📎 attach business cards</div>
   </div>
@@ -631,62 +472,38 @@
     <button id="chatSend">Send</button>
   </div>
 </div>
-
+ 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
-/* ===================================================
-   Maple MPSS — CRM + Tasks
-   Backend: Google Sheets (Companies, Visits, Tasks)
-   Auth: Google Identity Services (token-based)
-   =================================================== */
-
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events';
 const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks' };
-
-// State
+ 
 let state = {
-  companies: [],
-  visits: [],
-  tasks: [],
-  view: 'table',
-  currentTab: 'tasks',
-  editingTask: null,
-  editingCompany: null,
-  editingVisit: null,
-  visitForCompany: null,
-  taskForCompany: null,
+  companies: [], visits: [], tasks: [],
+  view: 'table', taskScope: 'all', currentTab: 'tasks',
+  editingTask: null, editingCompany: null, editingVisit: null,
+  visitForCompany: null, taskForCompany: null,
 };
-
 let cfg = {};
 let accessToken = null;
 let tokenClient = null;
 let syncing = false;
-
-// ========== CONFIG / SETUP ==========
-function loadConfig(){
-  try { cfg = JSON.parse(localStorage.getItem('maple_cfg') || '{}'); } catch(e){ cfg = {}; }
-}
+let tokenRefreshTimer = null;
+ 
+function loadConfig(){ try { cfg = JSON.parse(localStorage.getItem('maple_cfg') || '{}'); } catch(e){ cfg = {}; } }
 function saveConfig(){ localStorage.setItem('maple_cfg', JSON.stringify(cfg)); }
-
-function showSetup(){
-  document.getElementById('setupScreen').style.display = 'block';
-  document.getElementById('app').style.display = 'none';
-}
-function showApp(){
-  document.getElementById('setupScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-}
-
+function showSetup(){ document.getElementById('setupScreen').style.display = 'block'; document.getElementById('app').style.display = 'none'; }
+function showApp(){ document.getElementById('setupScreen').style.display = 'none'; document.getElementById('app').style.display = 'block'; }
+ 
 function saveSetup(){
   const cid = document.getElementById('setupClientId').value.trim();
   const sid = document.getElementById('setupSheetId').value.trim();
   const cal = document.getElementById('setupCalendarId').value.trim();
   if(!cid || !sid){ toast('Client ID and Sheet ID are required', true); return; }
   cfg = { clientId: cid, sheetId: sid, calendarId: cal || 'primary' };
-  saveConfig();
-  initApp();
+  saveConfig(); initApp();
 }
-
+ 
 function openSettings(){
   document.getElementById('setClientId').value = cfg.clientId || '';
   document.getElementById('setSheetId').value = cfg.sheetId || '';
@@ -698,18 +515,13 @@ function saveSettings(){
   cfg.clientId = document.getElementById('setClientId').value.trim();
   cfg.sheetId = document.getElementById('setSheetId').value.trim();
   cfg.calendarId = document.getElementById('setCalendarId').value.trim() || 'primary';
-  saveConfig();
-  closeSettings();
-  toast('Settings saved — sign in again to apply');
+  saveConfig(); closeSettings(); toast('Settings saved — sign in again to apply');
 }
 function resetApp(){
   if(!confirm('Reset all settings and local cache? Sheet data will not be touched.')) return;
-  localStorage.removeItem('maple_cfg');
-  localStorage.removeItem('maple_cache');
-  location.reload();
+  localStorage.removeItem('maple_cfg'); localStorage.removeItem('maple_cache'); location.reload();
 }
-
-// ========== TOAST ==========
+ 
 function toast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -717,38 +529,58 @@ function toast(msg, isError){
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.className = 'toast', 2500);
 }
-
-// ========== AUTH ==========
+ 
+// ========== AUTH (with auto sign-in / silent refresh) ==========
 function initAuth(){
-  if (typeof google === 'undefined' || !google.accounts) {
-    setTimeout(initAuth, 200);
-    return;
-  }
+  if (typeof google === 'undefined' || !google.accounts) { setTimeout(initAuth, 200); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.clientId,
     scope: SCOPES,
     callback: (resp) => {
-      if(resp.error){ setSync('error', 'Sign-in failed'); toast('Sign-in failed: '+resp.error, true); return; }
+      if(resp.error){
+        if(resp.error === 'popup_closed_by_user' || resp.error === 'access_denied'){
+          setSync('', 'Not signed in');
+          document.getElementById('signInBtn').style.display = 'inline-flex';
+          return;
+        }
+        setSync('', 'Not signed in');
+        document.getElementById('signInBtn').style.display = 'inline-flex';
+        if(resp.error !== 'immediate_failed'){ toast('Sign-in failed: '+resp.error, true); }
+        return;
+      }
       accessToken = resp.access_token;
       document.getElementById('signInBtn').style.display = 'none';
       setSync('connected', 'Connected');
-      toast('Signed in');
       pullAll();
+      const expiresIn = (resp.expires_in || 3600) * 1000;
+      if(tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+      tokenRefreshTimer = setTimeout(silentRefresh, Math.max(60000, expiresIn - 5*60*1000));
     }
   });
+  silentRefresh();
 }
+ 
+function silentRefresh(){
+  if(!tokenClient) return;
+  try { tokenClient.requestAccessToken({ prompt: '' }); }
+  catch(e){
+    console.warn('Silent refresh failed', e);
+    document.getElementById('signInBtn').style.display = 'inline-flex';
+  }
+}
+ 
 function googleSignIn(){
   if(!tokenClient){ toast('Auth not ready, try again', true); return; }
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  const prompt = accessToken ? '' : 'consent';
+  tokenClient.requestAccessToken({ prompt });
 }
-
+ 
 function setSync(state, text){
   const el = document.getElementById('syncStatus');
   el.className = 'sync-status ' + state;
   document.getElementById('syncText').textContent = text;
 }
-
-// ========== SHEETS API ==========
+ 
 async function sheetsRead(range){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
@@ -758,36 +590,23 @@ async function sheetsRead(range){
 }
 async function sheetsWrite(range, values){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
-  const r = await fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values })
-  });
+  const r = await fetch(url, { method: 'PUT', headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
   if(!r.ok) throw new Error('Write failed: '+r.status);
 }
 async function sheetsAppend(range, values){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ values })
-  });
+  const r = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
   if(!r.ok) throw new Error('Append failed: '+r.status);
   return await r.json();
 }
-
-// Schemas (column order MUST match the Apps Script setup)
+ 
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
-
-function rowToObj(row, cols){
-  const o = {};
-  cols.forEach((c, i) => o[c] = (row[i] !== undefined ? row[i] : '') );
-  return o;
-}
+ 
+function rowToObj(row, cols){ const o = {}; cols.forEach((c, i) => o[c] = (row[i] !== undefined ? row[i] : '') ); return o; }
 function objToRow(o, cols){ return cols.map(c => o[c] !== undefined && o[c] !== null ? String(o[c]) : ''); }
-
+ 
 async function pullAll(){
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -800,8 +619,7 @@ async function pullAll(){
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
     state.visits = vRows.filter(r=>r[0]).map(r=>rowToObj(r, VISIT_COLS));
-    cacheLocal();
-    refreshAll();
+    cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
   } catch(e){
     console.error(e);
@@ -809,60 +627,43 @@ async function pullAll(){
     toast('Sync failed: '+e.message, true);
   }
 }
-
-function cacheLocal(){
-  localStorage.setItem('maple_cache', JSON.stringify({
-    tasks: state.tasks, companies: state.companies, visits: state.visits, when: Date.now()
-  }));
-}
+ 
+function cacheLocal(){ localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, when: Date.now() })); }
 function loadCache(){
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
     if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; }
   } catch(e){}
 }
-
-// Find row index (1-based, accounting for header) of an item by id
+ 
 async function findRowIndex(tab, id){
   const rows = await sheetsRead(`${tab}!A2:A`);
-  for (let i = 0; i < rows.length; i++){
-    if(rows[i][0] === id) return i + 2; // +2: 1-indexed + header row
-  }
+  for (let i = 0; i < rows.length; i++){ if(rows[i][0] === id) return i + 2; }
   return -1;
 }
-
-// Generate an ID
 function newId(prefix){ return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`; }
 function nowIso(){ return new Date().toISOString(); }
-
-// Upsert helpers
+ 
 async function upsertRow(tab, cols, obj){
   if(!accessToken) throw new Error('Not signed in');
   const row = objToRow(obj, cols);
   const existingIdx = state[tabKeyForName(tab)].some(x => x.id === obj.id) ? await findRowIndex(tab, obj.id) : -1;
-  if(existingIdx > 0){
-    await sheetsWrite(`${tab}!A${existingIdx}:${colLetter(cols.length)}${existingIdx}`, [row]);
-  } else {
-    await sheetsAppend(`${tab}!A:${colLetter(cols.length)}`, [row]);
-  }
+  if(existingIdx > 0){ await sheetsWrite(`${tab}!A${existingIdx}:${colLetter(cols.length)}${existingIdx}`, [row]); }
+  else { await sheetsAppend(`${tab}!A:${colLetter(cols.length)}`, [row]); }
 }
 function tabKeyForName(tab){
   if(tab===SHEET_TABS.tasks) return 'tasks';
   if(tab===SHEET_TABS.companies) return 'companies';
   if(tab===SHEET_TABS.visits) return 'visits';
 }
-function colLetter(n){ // 1->A, 26->Z, 27->AA
-  let s = ''; while(n > 0){ const m = (n-1)%26; s = String.fromCharCode(65+m) + s; n = Math.floor((n-1)/26); } return s;
-}
+function colLetter(n){ let s = ''; while(n > 0){ const m = (n-1)%26; s = String.fromCharCode(65+m) + s; n = Math.floor((n-1)/26); } return s; }
 async function deleteRowById(tab, id){
   const idx = await findRowIndex(tab, id);
   if(idx < 0) return;
-  // We'll just blank the row (avoid full sheet delete API complexity). Pull will then filter empties.
   const numCols = (tab===SHEET_TABS.tasks?TASK_COLS:tab===SHEET_TABS.companies?COMPANY_COLS:VISIT_COLS).length;
   await sheetsWrite(`${tab}!A${idx}:${colLetter(numCols)}${idx}`, [Array(numCols).fill('')]);
 }
-
-// ========== UI: TABS ==========
+ 
 function switchTab(name){
   state.currentTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -872,32 +673,65 @@ function switchTab(name){
   else if(name==='companies') renderCompanies();
   else renderKanban();
 }
-
+ 
 function refreshAll(){
   populateFilterOptions();
   renderKanban();
   renderCompanies();
   renderDashboard();
-  document.getElementById('countTasks').textContent = state.tasks.length;
+  refreshOverdueAlert();
+  refreshTaskCount();
   document.getElementById('countCompanies').textContent = state.companies.length;
+  const overdueCount = getOverdueTasks().length;
+  if(overdueCount >= 3 && !sessionStorage.getItem('maple_overdue_shown')){
+    sessionStorage.setItem('maple_overdue_shown', '1');
+    setTimeout(openOverdueModal, 800);
+  }
 }
-
+ 
+function refreshTaskCount(){
+  const scopedCount = state.tasks.filter(t => {
+    if(state.taskScope === 'company') return !!t.companyId;
+    if(state.taskScope === 'personal') return !t.companyId;
+    return true;
+  }).length;
+  document.getElementById('countTasks').textContent = scopedCount;
+}
+ 
 function populateFilterOptions(){
-  // Categories from tasks
   const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
   const sel = document.getElementById('filterCategory');
   const cur = sel.value;
   sel.innerHTML = '<option value="">All categories</option>' + cats.map(c=>`<option>${esc(c)}</option>`).join('');
   sel.value = cur;
-  // Companies dropdown for filter + task modal
   const compSel = document.getElementById('filterCompany');
   const tCompSel = document.getElementById('tCompany');
   const compOpts = state.companies.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
   compSel.innerHTML = '<option value="">All companies</option>' + compOpts;
   tCompSel.innerHTML = '<option value="">— None —</option>' + compOpts;
 }
-
-// ========== KANBAN ==========
+ 
+function categoryClass(cat){
+  if(!cat) return 'Other';
+  const c = cat.toLowerCase();
+  if(c.includes('sales')) return 'Sales';
+  if(c.includes('marketing') || c.includes('linkedin') || c.includes('website') || c.includes('content')) return 'Marketing';
+  if(c.includes('admin') || c.includes('domain') || c.includes('billing') || c.includes('gst') || c.includes('email')) return 'Admin';
+  if(c.includes('pr application') || c.includes('express entry') || c.includes('immigration')) return 'PR';
+  if(c.includes('personal')) return 'Personal';
+  if(c.includes('learn') || c.includes('study') || c.includes('research') || c.includes('course') || c.includes('pmp')) return 'Learning';
+  return 'Other';
+}
+ 
+function setTaskScope(scope){
+  state.taskScope = scope;
+  document.querySelectorAll('#scopeToggle button').forEach(b => { b.classList.toggle('active', b.dataset.scope === scope); });
+  const compFilter = document.getElementById('filterCompany');
+  if(compFilter) compFilter.style.display = (scope === 'personal') ? 'none' : '';
+  renderKanban();
+  refreshTaskCount();
+}
+ 
 function renderKanban(){
   const root = document.getElementById('kanban');
   const statuses = ['Not started','In progress','Done','Blocked'];
@@ -905,15 +739,15 @@ function renderKanban(){
   const cat = document.getElementById('filterCategory').value;
   const ass = document.getElementById('filterAssignee').value;
   const comp = document.getElementById('filterCompany').value;
-
   const filtered = state.tasks.filter(t => {
+    if(state.taskScope === 'company' && !t.companyId) return false;
+    if(state.taskScope === 'personal' && t.companyId) return false;
     if(search && !(t.name||'').toLowerCase().includes(search)) return false;
     if(cat && t.category !== cat) return false;
     if(ass && t.assignee !== ass) return false;
     if(comp && t.companyId !== comp) return false;
     return true;
   });
-
   root.innerHTML = statuses.map(s => {
     const tasks = filtered.filter(t => (t.status||'Not started') === s);
     return `
@@ -928,6 +762,7 @@ function renderKanban(){
       </div>`;
   }).join('');
 }
+ 
 function renderCard(t){
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';
@@ -936,13 +771,14 @@ function renderCard(t){
       <div class="card-title">${esc(t.name)}</div>
       <div class="card-meta">
         ${t.priority?`<span class="pill pill-priority-${t.priority}">${t.priority}</span>`:''}
-        ${t.category?`<span class="pill pill-cat">${esc(t.category)}</span>`:''}
+        ${t.category?`<span class="pill pill-cat pill-cat-${categoryClass(t.category)}">${esc(t.category)}</span>`:''}
         ${company?`<span class="pill pill-company">🏢 ${esc(company.name)}</span>`:''}
         ${t.date?`<span class="card-date ${overdue?'overdue':''}">${formatDate(t.date)}</span>`:''}
         ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}
       </div>
     </div>`;
 }
+ 
 function onDragStart(e, id){ e.dataTransfer.setData('text/plain', id); e.target.classList.add('dragging'); }
 async function onDrop(e, status){
   document.querySelectorAll('.card.dragging').forEach(c=>c.classList.remove('dragging'));
@@ -950,18 +786,18 @@ async function onDrop(e, status){
   const t = state.tasks.find(x=>x.id===id);
   if(!t || t.status === status) return;
   t.status = status; t.updatedAt = nowIso();
-  renderKanban();
+  renderKanban(); refreshOverdueAlert();
   try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast('Moved'); } catch(err){ toast('Save failed', true); }
 }
-
-// ========== TASK MODAL ==========
+ 
 function openTaskModal(id, defaultStatus){
   state.editingTask = id ? state.tasks.find(t=>t.id===id) : null;
   const t = state.editingTask || {
     id: newId('TSK'), name:'', status: defaultStatus||'Not started', priority:'Medium',
-    date:'', duration:'', assignee:'Son', category:'Maple MPSS', companyId: state.taskForCompany||'',
+    date:'', duration:'', assignee:'Son', category:'', companyId: state.taskForCompany||'',
     notes:'', links:'', createdAt: nowIso()
   };
+  if(!id){ t.category = (state.taskForCompany || t.companyId) ? 'Sales' : 'Personal'; }
   state.taskForCompany = null;
   document.getElementById('taskModalTitle').textContent = id ? 'Edit task' : 'New task';
   document.getElementById('tName').value = t.name||'';
@@ -970,7 +806,7 @@ function openTaskModal(id, defaultStatus){
   document.getElementById('tDate').value = t.date||'';
   document.getElementById('tDuration').value = t.duration||'';
   document.getElementById('tAssignee').value = t.assignee||'Son';
-  document.getElementById('tCategory').value = t.category||'Maple MPSS';
+  document.getElementById('tCategory').value = t.category||'';
   document.getElementById('tCompany').value = t.companyId||'';
   document.getElementById('tNotes').value = t.notes||'';
   document.getElementById('tLinks').value = t.links||'';
@@ -979,7 +815,9 @@ function openTaskModal(id, defaultStatus){
   document.getElementById('taskModal').classList.add('open');
   setTimeout(()=>document.getElementById('tName').focus(), 50);
 }
+ 
 function closeTaskModal(){ document.getElementById('taskModal').classList.remove('open'); state.editingTask = null; }
+ 
 async function saveTask(){
   const t = state.editingTask;
   if(!t){ closeTaskModal(); return; }
@@ -995,32 +833,126 @@ async function saveTask(){
   t.notes = document.getElementById('tNotes').value;
   t.links = document.getElementById('tLinks').value;
   t.updatedAt = nowIso();
-
-  // Local update
   const idx = state.tasks.findIndex(x=>x.id===t.id);
   if(idx >= 0) state.tasks[idx] = t; else state.tasks.push(t);
-  refreshAll();
-  closeTaskModal();
-
+  refreshAll(); closeTaskModal();
   try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast('Saved'); cacheLocal(); }
   catch(e){ toast('Saved locally — sync failed', true); }
 }
+ 
 async function deleteTask(){
   const t = state.editingTask;
   if(!t || !confirm('Delete this task?')) return;
   state.tasks = state.tasks.filter(x=>x.id!==t.id);
-  refreshAll();
-  closeTaskModal();
+  refreshAll(); closeTaskModal();
   try { await deleteRowById(SHEET_TABS.tasks, t.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
-
-// ========== COMPANIES ==========
+ 
+// ========== OVERDUE ==========
+function getOverdueTasks(){
+  const today = new Date(new Date().toDateString());
+  return state.tasks.filter(t => {
+    if(!t.date) return false;
+    if(t.status === 'Done') return false;
+    return new Date(t.date) < today;
+  });
+}
+ 
+function refreshOverdueAlert(){
+  const overdue = getOverdueTasks();
+  const banner = document.getElementById('overdueBanner');
+  const bannerText = document.getElementById('overdueBannerText');
+  const dot = document.getElementById('taskAlertDot');
+  if(!banner || !dot) return;
+  if(overdue.length > 0){
+    banner.classList.add('show');
+    bannerText.textContent = `${overdue.length} task${overdue.length>1?'s':''} overdue`;
+    dot.classList.add('show');
+  } else {
+    banner.classList.remove('show');
+    dot.classList.remove('show');
+  }
+}
+ 
+function openOverdueModal(){
+  const overdue = getOverdueTasks().sort((a,b) => new Date(a.date) - new Date(b.date));
+  const list = document.getElementById('overdueList');
+  if(overdue.length === 0){
+    list.innerHTML = '<div class="empty-mini">No overdue tasks. 🎉</div>';
+  } else {
+    list.innerHTML = overdue.map(t => {
+      const company = state.companies.find(c => c.id === t.companyId);
+      const daysLate = Math.floor((new Date(new Date().toDateString()) - new Date(t.date)) / 86400000);
+      return `
+        <div class="overdue-row" data-id="${t.id}">
+          <div class="overdue-row-head">
+            <div>
+              <div class="overdue-row-name">${esc(t.name)}</div>
+              <div class="overdue-row-meta">
+                ${daysLate} day${daysLate!==1?'s':''} late · was ${formatDate(t.date)}
+                ${company ? '· 🏢 ' + esc(company.name) : ''}
+                ${t.priority ? '· ' + esc(t.priority) : ''}
+              </div>
+            </div>
+          </div>
+          <div class="overdue-actions">
+            <button onclick="rescheduleOverdue('${t.id}', 0)">Today</button>
+            <button onclick="rescheduleOverdue('${t.id}', 1)">Tomorrow</button>
+            <button onclick="rescheduleOverdue('${t.id}', 7)">+1 week</button>
+            <input type="date" class="custom-date" onchange="rescheduleOverdueCustom('${t.id}', this.value)">
+            <button class="done-btn" onclick="markOverdueDone('${t.id}')">✓ Done</button>
+            <button onclick="closeOverdueModal(); openTaskModal('${t.id}')">Edit…</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+  document.getElementById('overdueModal').classList.add('open');
+}
+ 
+function closeOverdueModal(){ document.getElementById('overdueModal').classList.remove('open'); }
+ 
+async function rescheduleOverdue(id, daysFromToday){
+  const t = state.tasks.find(x => x.id === id);
+  if(!t) return;
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  t.date = d.toISOString().slice(0,10);
+  t.updatedAt = nowIso();
+  await persistTaskAndRefresh(t, daysFromToday === 0 ? 'Moved to today' : daysFromToday === 1 ? 'Moved to tomorrow' : `Moved +${daysFromToday} days`);
+}
+ 
+async function rescheduleOverdueCustom(id, dateStr){
+  if(!dateStr) return;
+  const t = state.tasks.find(x => x.id === id);
+  if(!t) return;
+  t.date = dateStr; t.updatedAt = nowIso();
+  await persistTaskAndRefresh(t, 'Rescheduled to ' + formatDate(dateStr));
+}
+ 
+async function markOverdueDone(id){
+  const t = state.tasks.find(x => x.id === id);
+  if(!t) return;
+  t.status = 'Done'; t.updatedAt = nowIso();
+  await persistTaskAndRefresh(t, 'Marked done');
+}
+ 
+async function persistTaskAndRefresh(t, msg){
+  try {
+    await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
+    toast(msg);
+    renderKanban(); refreshOverdueAlert(); refreshTaskCount(); cacheLocal();
+    const stillOpen = document.getElementById('overdueModal').classList.contains('open');
+    if(stillOpen) openOverdueModal();
+  } catch(err){ toast('Save failed: ' + err.message, true); }
+}
+ 
 function setCompanyView(v){
   state.view = v;
   document.getElementById('viewTable').classList.toggle('active', v==='table');
   document.getElementById('viewCards').classList.toggle('active', v==='cards');
   renderCompanies();
 }
+ 
 function renderCompanies(){
   const root = document.getElementById('companiesContainer');
   const search = (document.getElementById('companySearch')?.value||'').toLowerCase();
@@ -1032,12 +964,10 @@ function renderCompanies(){
     if(owner && c.owner !== owner) return false;
     return true;
   });
-
   if(filtered.length === 0){
     root.innerHTML = `<div class="empty"><h3>No companies yet</h3><p>Click "+ Add company" to start building your CRM.</p></div>`;
     return;
   }
-
   if(state.view === 'cards'){
     root.innerHTML = `<div class="company-grid">${filtered.map(c=>{
       const lastVisit = state.visits.filter(v=>v.companyId===c.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
@@ -1079,8 +1009,7 @@ function renderCompanies(){
       </div>`;
   }
 }
-
-// ========== COMPANY MODAL ==========
+ 
 function openCompanyModal(id){
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
   const c = state.editingCompany || {
@@ -1103,7 +1032,9 @@ function openCompanyModal(id){
   document.getElementById('companyModal').classList.add('open');
   setTimeout(()=>document.getElementById('cName').focus(), 50);
 }
+ 
 function closeCompanyModal(){ document.getElementById('companyModal').classList.remove('open'); state.editingCompany = null; }
+ 
 async function saveCompany(){
   const c = state.editingCompany;
   if(!c){ closeCompanyModal(); return; }
@@ -1124,25 +1055,21 @@ async function saveCompany(){
   c.lastInteraction = document.getElementById('cLast').value;
   c.notes = document.getElementById('cNotes').value;
   c.updatedAt = nowIso();
-
   const idx = state.companies.findIndex(x=>x.id===c.id);
   if(idx >= 0) state.companies[idx] = c; else state.companies.push(c);
-  refreshAll();
-  closeCompanyModal();
-
+  refreshAll(); closeCompanyModal();
   try { await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c); toast('Saved'); cacheLocal(); }
   catch(e){ toast('Saved locally — sync failed', true); }
 }
+ 
 async function deleteCompany(){
   const c = state.editingCompany;
   if(!c || !confirm(`Delete ${c.name}? Linked tasks/visits will remain but be unlinked.`)) return;
   state.companies = state.companies.filter(x=>x.id!==c.id);
-  refreshAll();
-  closeCompanyModal();
+  refreshAll(); closeCompanyModal();
   try { await deleteRowById(SHEET_TABS.companies, c.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
-
-// ========== VISITS ==========
+ 
 function renderVisitsForCompany(companyId){
   const visits = state.visits.filter(v=>v.companyId===companyId).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const list = document.getElementById('visitList');
@@ -1157,7 +1084,6 @@ function renderVisitsForCompany(companyId){
       <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">Logged by ${esc(v.loggedBy||'—')}</div>
     </div>
   `).join('') : '<div class="empty-mini">No visits logged yet</div>';
-
   const tasks = state.tasks.filter(t=>t.companyId===companyId);
   const linked = document.getElementById('linkedTasks');
   linked.innerHTML = tasks.length ? tasks.map(t=>`
@@ -1168,7 +1094,7 @@ function renderVisitsForCompany(companyId){
     </div>
   `).join('') : '<div class="empty-mini">No linked tasks</div>';
 }
-
+ 
 function openVisitModal(id){
   state.editingVisit = id ? state.visits.find(v=>v.id===id) : null;
   const c = state.editingCompany;
@@ -1186,11 +1112,13 @@ function openVisitModal(id){
   if(!id) state.editingVisit = v;
   document.getElementById('visitModal').classList.add('open');
 }
+ 
 function closeVisitModal(){
   document.getElementById('visitModal').classList.remove('open');
   state.editingVisit = null;
   if(state.editingCompany) renderVisitsForCompany(state.editingCompany.id);
 }
+ 
 async function saveVisit(){
   const v = state.editingVisit;
   if(!v){ closeVisitModal(); return; }
@@ -1200,42 +1128,37 @@ async function saveVisit(){
   v.notes = document.getElementById('vNotes').value;
   v.nextStep = document.getElementById('vNext').value;
   v.loggedBy = document.getElementById('vBy').value;
-
   const idx = state.visits.findIndex(x=>x.id===v.id);
   if(idx >= 0) state.visits[idx] = v; else state.visits.push(v);
-
-  // Auto-update company's lastInteraction
   if(state.editingCompany && v.date){
     state.editingCompany.lastInteraction = v.date;
     if(state.editingCompany.status === 'Prospect') state.editingCompany.status = 'Visited';
     document.getElementById('cLast').value = v.date;
     document.getElementById('cStatus').value = state.editingCompany.status;
   }
-
-  closeVisitModal();
-  refreshAll();
+  closeVisitModal(); refreshAll();
   try {
     await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
     if(state.editingCompany) await upsertRow(SHEET_TABS.companies, COMPANY_COLS, state.editingCompany);
     toast('Visit logged'); cacheLocal();
   } catch(e){ toast('Saved locally — sync failed', true); }
 }
+ 
 async function deleteVisit(){
   const v = state.editingVisit;
   if(!v || !confirm('Delete this visit?')) return;
   state.visits = state.visits.filter(x=>x.id!==v.id);
-  closeVisitModal();
-  refreshAll();
+  closeVisitModal(); refreshAll();
   try { await deleteRowById(SHEET_TABS.visits, v.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
+ 
 function openTaskModalForCompany(){
   if(!state.editingCompany) return;
   state.taskForCompany = state.editingCompany.id;
   closeCompanyModal();
   openTaskModal();
 }
-
-// ========== DASHBOARD ==========
+ 
 function renderDashboard(){
   const stats = computeStats();
   document.getElementById('statCards').innerHTML = `
@@ -1246,8 +1169,6 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Response rate</div><div class="stat-value">${stats.responseRate}%</div><div class="stat-sub">visited → quoted+</div></div>
     <div class="stat-card"><div class="stat-label">Win rate</div><div class="stat-value">${stats.winRate}%</div><div class="stat-sub">quoted → won</div></div>
   `;
-
-  // Funnel
   const statuses = ['Prospect','Visited','Quoted','Won','Lost'];
   const counts = statuses.map(s => state.companies.filter(c => (c.status||'Prospect') === s).length);
   const max = Math.max(...counts, 1);
@@ -1255,10 +1176,7 @@ function renderDashboard(){
     <div class="funnel-row">
       <div class="funnel-label">${s}</div>
       <div class="funnel-bar"><div class="funnel-fill ${s}" style="width:${(counts[i]/max)*100}%">${counts[i]||''}</div></div>
-    </div>
-  `).join('');
-
-  // Activity (recent visits)
+    </div>`).join('');
   const recent = [...state.visits].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0, 8);
   document.getElementById('activityList').innerHTML = recent.length ? recent.map(v=>{
     const c = state.companies.find(x=>x.id===v.companyId);
@@ -1270,8 +1188,6 @@ function renderDashboard(){
       </div>
     </div>`;
   }).join('') : '<div class="empty-mini">No visits logged yet</div>';
-
-  // Pipeline by company
   const withValue = state.companies.filter(c => Number(c.value) > 0).sort((a,b)=>Number(b.value)-Number(a.value)).slice(0, 8);
   document.getElementById('pipelineList').innerHTML = withValue.length ? withValue.map(c=>{
     const total = withValue.reduce((s,x)=>s+Number(x.value||0),0);
@@ -1284,12 +1200,9 @@ function renderDashboard(){
       <div style="flex:0 0 80px;text-align:right;font-weight:500">$${Number(c.value).toLocaleString()}</div>
     </div>`;
   }).join('') : '<div class="empty-mini">Add pipeline values to companies to see this chart</div>';
-
-  // Tasks due this week
   const today = new Date(); today.setHours(0,0,0,0);
   const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate()+7);
-  const due = state.tasks.filter(t => t.date && new Date(t.date) <= weekEnd && t.status !== 'Done')
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const due = state.tasks.filter(t => t.date && new Date(t.date) <= weekEnd && t.status !== 'Done').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   document.getElementById('dueThisWeek').innerHTML = due.length ? due.slice(0,10).map(t=>{
     const c = state.companies.find(x=>x.id===t.companyId);
     const overdue = new Date(t.date) < today;
@@ -1300,23 +1213,17 @@ function renderDashboard(){
     </div>`;
   }).join('') : '<div class="empty-mini">Nothing due this week 🎉</div>';
 }
-
+ 
 function computeStats(){
   const today = new Date(); today.setHours(0,0,0,0);
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
   const twoWeeksAgo = new Date(today); twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14);
-
   const visitsThisWeek = state.visits.filter(v=>v.date && new Date(v.date) >= weekAgo).length;
-  const visitsLastWeek = state.visits.filter(v=>{
-    const d = new Date(v.date);
-    return d >= twoWeeksAgo && d < weekAgo;
-  }).length;
-
+  const visitsLastWeek = state.visits.filter(v=>{ const d = new Date(v.date); return d >= twoWeeksAgo && d < weekAgo; }).length;
   const visited = state.companies.filter(c=>['Visited','Quoted','Won','Lost'].includes(c.status)).length;
   const quotedPlus = state.companies.filter(c=>['Quoted','Won'].includes(c.status)).length;
   const won = state.companies.filter(c=>c.status==='Won').length;
   const quoted = state.companies.filter(c=>['Quoted','Won','Lost'].includes(c.status)).length;
-
   return {
     totalCompanies: state.companies.length,
     activeCompanies: state.companies.filter(c=>c.status!=='Lost').length,
@@ -1329,8 +1236,7 @@ function computeStats(){
     winRate: quoted ? Math.round((won/quoted)*100) : 0,
   };
 }
-
-// ========== UTILS ==========
+ 
 function esc(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function formatDate(d){
   if(!d) return '';
@@ -1338,39 +1244,28 @@ function formatDate(d){
   if(isNaN(dt)) return d;
   return dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' });
 }
-
-// ========== INIT ==========
-function initApp(){
-  showApp();
-  loadCache();
-  refreshAll();
-  initAuth();
-}
+ 
+function initApp(){ showApp(); loadCache(); refreshAll(); initAuth(); }
 function forceSync(){ if(accessToken) pullAll(); else toast('Sign in first', true); }
-
-// Keyboard shortcuts
+ 
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if(e.key === 'n' || e.key === 'N'){
     if(state.currentTab === 'companies') openCompanyModal();
     else openTaskModal();
   }
-  if(e.key === 'Escape'){
-    document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open'));
-  }
+  if(e.key === 'Escape'){ document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open')); }
 });
-
-// Auto-sync every 60s
+ 
 setInterval(()=>{ if(accessToken && document.visibilityState === 'visible') pullAll(); }, 60000);
-
-// Boot
+ 
 loadConfig();
 if(cfg.clientId && cfg.sheetId) initApp();
 else showSetup();
-
+ 
 /* ============ CHAT AGENT (v2: with business card vision) ============ */
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
-
+ 
 (function chatInit(){
   const fab      = document.getElementById("chatFab");
   const panel    = document.getElementById("chatPanel");
@@ -1382,8 +1277,8 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
   const fileInp  = document.getElementById("chatFile");
   const preview  = document.getElementById("chatPreview");
   let chatHistory = [];
-  let pendingImages = []; // { id, mediaType, data, dataUrl }
-
+  let pendingImages = [];
+ 
   fab.addEventListener("click", () => {
     panel.classList.toggle("open");
     if (panel.classList.contains("open")) input.focus();
@@ -1395,7 +1290,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
   sendBtn.addEventListener("click", sendChat);
   attachBtn.addEventListener("click", () => fileInp.click());
   fileInp.addEventListener("change", handleFiles);
-
+ 
   function bubble(text, cls){
     const d = document.createElement("div");
     d.className = "chatMsg " + cls;
@@ -1404,24 +1299,21 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
     msgs.scrollTop = msgs.scrollHeight;
     return d;
   }
-
+ 
   async function handleFiles(e){
     const files = Array.from(e.target.files || []);
-    fileInp.value = ""; // allow re-selecting the same file
+    fileInp.value = "";
     for (const f of files){
       if (!f.type.startsWith("image/")) continue;
       try {
         const compressed = await compressImage(f, 1600, 0.82);
         const id = Math.random().toString(36).slice(2,8);
         pendingImages.push({ id, mediaType: "image/jpeg", data: compressed.base64, dataUrl: compressed.dataUrl });
-      } catch(err){
-        bubble("Failed to read image: " + err.message, "error");
-      }
+      } catch(err){ bubble("Failed to read image: " + err.message, "error"); }
     }
     renderPreview();
   }
-
-  // Resize/compress to keep payload small (mobile photos can be 5MB+)
+ 
   function compressImage(file, maxDim, quality){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1447,7 +1339,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       reader.readAsDataURL(file);
     });
   }
-
+ 
   function renderPreview(){
     if (pendingImages.length === 0){ preview.classList.remove("show"); preview.innerHTML = ""; return; }
     preview.classList.add("show");
@@ -1458,33 +1350,27 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       </div>`
     ).join("");
   }
-  window.__removeChatImg = (id) => {
-    pendingImages = pendingImages.filter(x => x.id !== id);
-    renderPreview();
-  };
-
+  window.__removeChatImg = (id) => { pendingImages = pendingImages.filter(x => x.id !== id); renderPreview(); };
+ 
   async function sendChat(){
     const text = input.value.trim();
     const images = pendingImages.slice();
     if (!text && images.length === 0) return;
     if (!accessToken) { bubble("Sign in first so I can write to your Sheet.", "error"); return; }
-
     input.value = "";
     pendingImages = [];
     renderPreview();
     sendBtn.disabled = true;
-
-    // Show user bubble (mention image count if no text)
     const displayText = text || `[${images.length} business card${images.length>1?'s':''} attached]`;
     bubble(displayText, "user");
-
     const thinking = bubble(images.length ? "Reading card(s)…" : "Thinking…", "system");
-
+ 
     try {
       const context = {
         today: new Date().toISOString().slice(0,10),
         user: "Prrithive",
-        companies: state.companies.map(c => ({ id: c.id, name: c.name }))
+        companies: state.companies.map(c => ({ id: c.id, name: c.name })),
+        categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks like "update LinkedIn" or "renew domain".'
       };
       const payload = {
         message: text,
@@ -1499,17 +1385,13 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       });
       const data = await resp.json();
       thinking.remove();
-
       if (!resp.ok) { bubble("Error: " + (data.error || "unknown"), "error"); return; }
       if (data.reply) bubble(data.reply, "assistant");
-
+ 
       if (data.toolCalls && data.toolCalls.length) {
-        // Execute in order so add_company runs before its linked add_task
-        // Track newly-created companies by name → id for in-batch linking
-        const createdByName = {}; // lowercase name → id
+        const createdByName = {};
         for (const call of data.toolCalls) {
           try {
-            // If task references a companyName that we just created, swap in the real id
             if (call.name === "add_task" && (!call.input.companyId || call.input.companyId === "") && call.input.companyName) {
               const key = String(call.input.companyName).toLowerCase().trim();
               if (createdByName[key]) call.input.companyId = createdByName[key];
@@ -1526,7 +1408,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         refreshAll();
         cacheLocal();
       }
-
+ 
       chatHistory.push({ role: "user", content: text || "(business card image)" });
       if (data.reply) chatHistory.push({ role: "assistant", content: data.reply });
       if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
@@ -1538,12 +1420,12 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       input.focus();
     }
   }
-
+ 
   async function executeChatToolCall(call) {
     const { name, input: args } = call;
-
     switch (name) {
       case "add_task": {
+        const defaultCat = args.companyId ? 'Sales' : 'Personal';
         const t = {
           id: newId('TSK'),
           name: args.name,
@@ -1552,7 +1434,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
           date: args.date || '',
           duration: args.duration || '',
           assignee: args.assignee || 'Son',
-          category: args.category || 'Maple MPSS',
+          category: args.category || defaultCat,
           companyId: args.companyId || '',
           notes: args.notes || '',
           links: args.links || '',
@@ -1564,7 +1446,6 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         const co = state.companies.find(c => c.id === args.companyId);
         return { summary: `Added task "${t.name}"${co ? " for " + co.name : ""}${t.date ? " (" + formatDate(t.date) + ")" : ""}` };
       }
-
       case "update_task": {
         const t = state.tasks.find(x => x.id === args.id);
         if (!t) throw new Error("Task not found: " + args.id);
@@ -1575,9 +1456,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
         return { summary: `Updated task "${t.name}"` };
       }
-
       case "add_company": {
-        // Append contactTitle into notes if provided
         const notesParts = [];
         if (args.notes) notesParts.push(args.notes);
         if (args.contactTitle) notesParts.push("Title: " + args.contactTitle);
@@ -1605,7 +1484,6 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
         return { summary: `Added company "${c.name}"${c.contact ? " (" + c.contact + ")" : ""}`, id: c.id, name: c.name };
       }
-
       case "update_company": {
         const c = state.companies.find(x => x.id === args.id);
         if (!c) throw new Error("Company not found: " + args.id);
@@ -1616,7 +1494,6 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
         return { summary: `Updated ${c.name}` };
       }
-
       case "log_visit": {
         const v = {
           id: newId('VIS'),
@@ -1631,7 +1508,6 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         };
         state.visits.push(v);
         await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
-
         const co = state.companies.find(x => x.id === args.companyId);
         if (co && v.date) {
           co.lastInteraction = v.date;
@@ -1640,13 +1516,11 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         }
         return { summary: `Logged ${args.type} visit${co ? " with " + co.name : ""} (${formatDate(v.date)})` };
       }
-
       default:
         throw new Error("Unknown tool: " + name);
     }
   }
 })();
-/* ============ END CHAT AGENT ============ */
 </script>
 </body>
 </html>
