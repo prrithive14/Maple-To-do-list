@@ -1,6 +1,3 @@
-x · HTML
-Copy
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -182,6 +179,30 @@ Copy
   .overdue-actions button:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
   .overdue-actions .done-btn:hover{background:var(--green);border-color:var(--green)}
   .overdue-actions .custom-date{padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:var(--radius)}
+  .cal-nav{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .cal-nav-title{font-family:'Fraunces',serif;font-size:16px;font-weight:600;flex:1;text-align:center}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;min-height:500px}
+  .cal-day{background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:8px;display:flex;flex-direction:column;min-height:120px;cursor:pointer;transition:border-color .15s}
+  .cal-day:hover{border-color:var(--ink-mute)}
+  .cal-day.today{border-color:var(--accent);border-width:2px}
+  .cal-day.past{opacity:.6}
+  .cal-day-header{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-mute);font-weight:500;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+  .cal-day-num{font-family:'Fraunces',serif;font-size:18px;font-weight:600;color:var(--ink)}
+  .cal-day.today .cal-day-num{color:var(--accent)}
+  .cal-day-tasks{display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto;max-height:300px}
+  .cal-task{padding:5px 8px;border-radius:var(--radius);font-size:12px;line-height:1.3;cursor:pointer;border-left:3px solid var(--line);background:var(--bg-sunken);transition:all .15s;word-break:break-word}
+  .cal-task:hover{background:var(--line-soft);transform:translateX(2px)}
+  .cal-task.done{text-decoration:line-through;opacity:.5}
+  .cal-task-cat-Sales{border-left-color:var(--green)}
+  .cal-task-cat-Marketing{border-left-color:var(--purple)}
+  .cal-task-cat-Admin{border-left-color:var(--blue)}
+  .cal-task-cat-PR{border-left-color:var(--yellow)}
+  .cal-task-cat-Personal{border-left-color:var(--red)}
+  .cal-task-cat-Learning{border-left-color:#8a6d3b}
+  .cal-task-cat-Other{border-left-color:var(--ink-mute)}
+  .cal-unscheduled{margin-top:12px;background:var(--bg-sunken);border-radius:var(--radius-lg);padding:10px}
+  .cal-unscheduled-title{font-size:12px;font-weight:600;color:var(--ink-mute);margin-bottom:6px}
+  @media(max-width:768px){.cal-grid{grid-template-columns:1fr;gap:6px}.cal-day{min-height:auto}}
   .setup{max-width:560px;margin:60px auto;background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:32px;box-shadow:var(--shadow)}
   .setup h2{font-family:'Fraunces',serif;font-size:26px;font-weight:600;margin-bottom:6px}
   .setup p{color:var(--ink-soft);margin-bottom:20px;font-size:13px}
@@ -229,7 +250,7 @@ Copy
 </style>
 </head>
 <body>
- 
+
 <div id="setupScreen" class="setup" style="display:none">
   <h2>Welcome to Maple MPSS</h2>
   <p>One-time setup. You'll need a Google Cloud OAuth Client ID and a Google Sheet to use as your database.</p>
@@ -248,7 +269,7 @@ Copy
   </details>
   <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="saveSetup()">Save & Continue</button>
 </div>
- 
+
 <div id="app" style="display:none">
 <header class="header">
   <div class="header-inner">
@@ -260,13 +281,13 @@ Copy
     </div>
   </div>
 </header>
- 
+
 <nav class="tabs">
   <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
 </nav>
- 
+
 <main class="main">
   <section id="tab-tasks" class="tab-pane">
     <div class="overdue-banner" id="overdueBanner">
@@ -279,17 +300,30 @@ Copy
         <button data-scope="company" onclick="setTaskScope('company')">🏢 Company</button>
         <button data-scope="personal" onclick="setTaskScope('personal')">👤 Personal</button>
       </div>
-      <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderKanban()">
-      <select class="filter-select" id="filterCategory" onchange="renderKanban()"><option value="">All categories</option></select>
-      <select class="filter-select" id="filterAssignee" onchange="renderKanban()">
+      <div class="view-toggle" id="taskViewToggle">
+        <button data-view="kanban" class="active" onclick="setTaskView('kanban')">☰ Kanban</button>
+        <button data-view="calendar" onclick="setTaskView('calendar')">📅 Calendar</button>
+      </div>
+      <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderTaskView()">
+      <select class="filter-select" id="filterCategory" onchange="renderTaskView()"><option value="">All categories</option></select>
+      <select class="filter-select" id="filterAssignee" onchange="renderTaskView()">
         <option value="">All assignees</option><option>Son</option><option>Dad</option><option>Both</option>
       </select>
-      <select class="filter-select" id="filterCompany" onchange="renderKanban()"><option value="">All companies</option></select>
+      <select class="filter-select" id="filterCompany" onchange="renderTaskView()"><option value="">All companies</option></select>
       <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add task</button>
     </div>
     <div class="kanban" id="kanban"></div>
+    <div id="calendarView" style="display:none">
+      <div class="cal-nav">
+        <button class="btn btn-sm" onclick="calWeekOffset(-1)">← Prev</button>
+        <button class="btn btn-sm" onclick="calWeekOffset(0)">Today</button>
+        <span class="cal-nav-title" id="calWeekLabel">Week of Apr 14</span>
+        <button class="btn btn-sm" onclick="calWeekOffset(1)">Next →</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
   </section>
- 
+
   <section id="tab-companies" class="tab-pane" style="display:none">
     <div class="toolbar">
       <div class="filters" style="margin:0">
@@ -311,7 +345,7 @@ Copy
     </div>
     <div id="companiesContainer"></div>
   </section>
- 
+
   <section id="tab-dashboard" class="tab-pane" style="display:none">
     <div class="dash-grid" id="statCards"></div>
     <div class="dash-row">
@@ -325,7 +359,7 @@ Copy
   </section>
 </main>
 </div>
- 
+
 <div class="modal-backdrop" id="taskModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="taskModalTitle">New task</div><button class="modal-close" onclick="closeTaskModal()">✕</button></div>
@@ -358,7 +392,7 @@ Copy
     </div>
   </div>
 </div>
- 
+
 <div class="modal-backdrop" id="companyModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="companyModalTitle">New company</div><button class="modal-close" onclick="closeCompanyModal()">✕</button></div>
@@ -396,7 +430,7 @@ Copy
     </div>
   </div>
 </div>
- 
+
 <div class="modal-backdrop" id="visitModal">
   <div class="modal" style="max-width:520px">
     <div class="modal-header"><div class="modal-title">Log visit</div><button class="modal-close" onclick="closeVisitModal()">✕</button></div>
@@ -419,7 +453,7 @@ Copy
     </div>
   </div>
 </div>
- 
+
 <div class="modal-backdrop" id="settingsModal">
   <div class="modal" style="max-width:520px">
     <div class="modal-header"><div class="modal-title">Settings</div><button class="modal-close" onclick="closeSettings()">✕</button></div>
@@ -440,7 +474,7 @@ Copy
     </div>
   </div>
 </div>
- 
+
 <div class="modal-backdrop" id="overdueModal">
   <div class="modal" style="max-width:600px">
     <div class="modal-header"><div class="modal-title">⚠ Overdue tasks</div><button class="modal-close" onclick="closeOverdueModal()">✕</button></div>
@@ -455,9 +489,9 @@ Copy
     </div>
   </div>
 </div>
- 
+
 <div class="toast" id="toast"></div>
- 
+
 <button id="chatFab" title="Maple Assistant">💬</button>
 <div id="chatPanel">
   <div id="chatHeader"><h3>Maple Assistant</h3><button id="chatClose" title="Close">×</button></div>
@@ -472,15 +506,15 @@ Copy
     <button id="chatSend">Send</button>
   </div>
 </div>
- 
+
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events';
 const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks' };
- 
+
 let state = {
   companies: [], visits: [], tasks: [],
-  view: 'table', taskScope: 'all', currentTab: 'tasks',
+  view: 'table', taskScope: 'all', taskView: 'kanban', currentTab: 'tasks',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
 };
@@ -489,12 +523,12 @@ let accessToken = null;
 let tokenClient = null;
 let syncing = false;
 let tokenRefreshTimer = null;
- 
+
 function loadConfig(){ try { cfg = JSON.parse(localStorage.getItem('maple_cfg') || '{}'); } catch(e){ cfg = {}; } }
 function saveConfig(){ localStorage.setItem('maple_cfg', JSON.stringify(cfg)); }
 function showSetup(){ document.getElementById('setupScreen').style.display = 'block'; document.getElementById('app').style.display = 'none'; }
 function showApp(){ document.getElementById('setupScreen').style.display = 'none'; document.getElementById('app').style.display = 'block'; }
- 
+
 function saveSetup(){
   const cid = document.getElementById('setupClientId').value.trim();
   const sid = document.getElementById('setupSheetId').value.trim();
@@ -503,7 +537,7 @@ function saveSetup(){
   cfg = { clientId: cid, sheetId: sid, calendarId: cal || 'primary' };
   saveConfig(); initApp();
 }
- 
+
 function openSettings(){
   document.getElementById('setClientId').value = cfg.clientId || '';
   document.getElementById('setSheetId').value = cfg.sheetId || '';
@@ -521,7 +555,7 @@ function resetApp(){
   if(!confirm('Reset all settings and local cache? Sheet data will not be touched.')) return;
   localStorage.removeItem('maple_cfg'); localStorage.removeItem('maple_cache'); location.reload();
 }
- 
+
 function toast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -529,7 +563,7 @@ function toast(msg, isError){
   clearTimeout(t._timer);
   t._timer = setTimeout(() => t.className = 'toast', 2500);
 }
- 
+
 // ========== AUTH (with auto sign-in / silent refresh) ==========
 function initAuth(){
   if (typeof google === 'undefined' || !google.accounts) { setTimeout(initAuth, 200); return; }
@@ -559,7 +593,7 @@ function initAuth(){
   });
   silentRefresh();
 }
- 
+
 function silentRefresh(){
   if(!tokenClient) return;
   try { tokenClient.requestAccessToken({ prompt: '' }); }
@@ -568,19 +602,19 @@ function silentRefresh(){
     document.getElementById('signInBtn').style.display = 'inline-flex';
   }
 }
- 
+
 function googleSignIn(){
   if(!tokenClient){ toast('Auth not ready, try again', true); return; }
   const prompt = accessToken ? '' : 'consent';
   tokenClient.requestAccessToken({ prompt });
 }
- 
+
 function setSync(state, text){
   const el = document.getElementById('syncStatus');
   el.className = 'sync-status ' + state;
   document.getElementById('syncText').textContent = text;
 }
- 
+
 async function sheetsRead(range){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
@@ -599,14 +633,14 @@ async function sheetsAppend(range, values){
   if(!r.ok) throw new Error('Append failed: '+r.status);
   return await r.json();
 }
- 
+
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
- 
+
 function rowToObj(row, cols){ const o = {}; cols.forEach((c, i) => o[c] = (row[i] !== undefined ? row[i] : '') ); return o; }
 function objToRow(o, cols){ return cols.map(c => o[c] !== undefined && o[c] !== null ? String(o[c]) : ''); }
- 
+
 async function pullAll(){
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -627,7 +661,7 @@ async function pullAll(){
     toast('Sync failed: '+e.message, true);
   }
 }
- 
+
 function cacheLocal(){ localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, when: Date.now() })); }
 function loadCache(){
   try {
@@ -635,7 +669,7 @@ function loadCache(){
     if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; }
   } catch(e){}
 }
- 
+
 async function findRowIndex(tab, id){
   const rows = await sheetsRead(`${tab}!A2:A`);
   for (let i = 0; i < rows.length; i++){ if(rows[i][0] === id) return i + 2; }
@@ -643,7 +677,7 @@ async function findRowIndex(tab, id){
 }
 function newId(prefix){ return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,6)}`; }
 function nowIso(){ return new Date().toISOString(); }
- 
+
 async function upsertRow(tab, cols, obj){
   if(!accessToken) throw new Error('Not signed in');
   const row = objToRow(obj, cols);
@@ -663,7 +697,7 @@ async function deleteRowById(tab, id){
   const numCols = (tab===SHEET_TABS.tasks?TASK_COLS:tab===SHEET_TABS.companies?COMPANY_COLS:VISIT_COLS).length;
   await sheetsWrite(`${tab}!A${idx}:${colLetter(numCols)}${idx}`, [Array(numCols).fill('')]);
 }
- 
+
 function switchTab(name){
   state.currentTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -671,12 +705,12 @@ function switchTab(name){
   document.getElementById('tab-'+name).style.display = 'block';
   if(name==='dashboard') renderDashboard();
   else if(name==='companies') renderCompanies();
-  else renderKanban();
+  else renderTaskView();
 }
- 
+
 function refreshAll(){
   populateFilterOptions();
-  renderKanban();
+  renderTaskView();
   renderCompanies();
   renderDashboard();
   refreshOverdueAlert();
@@ -688,7 +722,7 @@ function refreshAll(){
     setTimeout(openOverdueModal, 800);
   }
 }
- 
+
 function refreshTaskCount(){
   const scopedCount = state.tasks.filter(t => {
     if(state.taskScope === 'company') return !!t.companyId;
@@ -697,7 +731,7 @@ function refreshTaskCount(){
   }).length;
   document.getElementById('countTasks').textContent = scopedCount;
 }
- 
+
 function populateFilterOptions(){
   const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
   const sel = document.getElementById('filterCategory');
@@ -710,7 +744,7 @@ function populateFilterOptions(){
   compSel.innerHTML = '<option value="">All companies</option>' + compOpts;
   tCompSel.innerHTML = '<option value="">— None —</option>' + compOpts;
 }
- 
+
 function categoryClass(cat){
   if(!cat) return 'Other';
   const c = cat.toLowerCase();
@@ -722,24 +756,37 @@ function categoryClass(cat){
   if(c.includes('learn') || c.includes('study') || c.includes('research') || c.includes('course') || c.includes('pmp')) return 'Learning';
   return 'Other';
 }
- 
+
 function setTaskScope(scope){
   state.taskScope = scope;
   document.querySelectorAll('#scopeToggle button').forEach(b => { b.classList.toggle('active', b.dataset.scope === scope); });
   const compFilter = document.getElementById('filterCompany');
   if(compFilter) compFilter.style.display = (scope === 'personal') ? 'none' : '';
-  renderKanban();
+  renderTaskView();
   refreshTaskCount();
 }
- 
-function renderKanban(){
-  const root = document.getElementById('kanban');
-  const statuses = ['Not started','In progress','Done','Blocked'];
+
+// ========== TASK VIEW TOGGLE (Kanban ↔ Calendar) ==========
+function setTaskView(view){
+  state.taskView = view;
+  document.querySelectorAll('#taskViewToggle button').forEach(b => { b.classList.toggle('active', b.dataset.view === view); });
+  document.getElementById('kanban').style.display = (view === 'kanban') ? '' : 'none';
+  document.getElementById('calendarView').style.display = (view === 'calendar') ? '' : 'none';
+  renderTaskView();
+}
+
+function renderTaskView(){
+  if(state.taskView === 'calendar') renderCalendar();
+  else renderKanban();
+}
+
+// Shared filter logic
+function getFilteredTasks(){
   const search = document.getElementById('taskSearch').value.toLowerCase();
   const cat = document.getElementById('filterCategory').value;
   const ass = document.getElementById('filterAssignee').value;
   const comp = document.getElementById('filterCompany').value;
-  const filtered = state.tasks.filter(t => {
+  return state.tasks.filter(t => {
     if(state.taskScope === 'company' && !t.companyId) return false;
     if(state.taskScope === 'personal' && t.companyId) return false;
     if(search && !(t.name||'').toLowerCase().includes(search)) return false;
@@ -748,6 +795,102 @@ function renderKanban(){
     if(comp && t.companyId !== comp) return false;
     return true;
   });
+}
+
+// ========== CALENDAR VIEW ==========
+let calCurrentWeekStart = getMonday(new Date());
+
+function getMonday(d){
+  const dt = new Date(d); dt.setHours(0,0,0,0);
+  const day = dt.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // Monday=1
+  dt.setDate(dt.getDate() + diff);
+  return dt;
+}
+
+function calWeekOffset(dir){
+  if(dir === 0) calCurrentWeekStart = getMonday(new Date());
+  else {
+    calCurrentWeekStart = new Date(calCurrentWeekStart);
+    calCurrentWeekStart.setDate(calCurrentWeekStart.getDate() + dir * 7);
+  }
+  renderCalendar();
+}
+
+function renderCalendar(){
+  const filtered = getFilteredTasks();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const weekStart = new Date(calCurrentWeekStart);
+
+  // Week label
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
+  const fmt = (d) => d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  document.getElementById('calWeekLabel').textContent = fmt(weekStart) + ' — ' + fmt(weekEnd);
+
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const grid = document.getElementById('calGrid');
+  let html = '';
+
+  for(let i = 0; i < 7; i++){
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().slice(0,10);
+    const isToday = d.getTime() === today.getTime();
+    const isPast = d < today;
+    const dayTasks = filtered.filter(t => t.date === dateStr);
+
+    html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="openTaskModalForDate('${dateStr}', event)">
+      <div class="cal-day-header">
+        <span>${days[i]}</span>
+        <span class="cal-day-num">${d.getDate()}</span>
+      </div>
+      <div class="cal-day-tasks">
+        ${dayTasks.map(t => {
+          const cc = categoryClass(t.category);
+          const isDone = t.status === 'Done';
+          return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">
+            ${esc(t.name)}
+          </div>`;
+        }).join('') || ''}
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+
+  // Show unscheduled tasks below
+  const noDate = filtered.filter(t => !t.date && t.status !== 'Done');
+  let unschedHtml = '';
+  if(noDate.length > 0){
+    unschedHtml = `<div class="cal-unscheduled">
+      <div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div>
+      <div class="cal-day-tasks">
+        ${noDate.map(t => {
+          const cc = categoryClass(t.category);
+          return `<div class="cal-task cal-task-cat-${cc}" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+  // Insert/update unscheduled section
+  let unsched = document.getElementById('calUnscheduled');
+  if(!unsched){
+    unsched = document.createElement('div');
+    unsched.id = 'calUnscheduled';
+    document.getElementById('calendarView').appendChild(unsched);
+  }
+  unsched.innerHTML = unschedHtml;
+}
+
+function openTaskModalForDate(dateStr, event){
+  if(event && event.target.closest('.cal-task')) return; // clicked a task, not empty space
+  openTaskModal(null, 'Not started');
+  setTimeout(() => { document.getElementById('tDate').value = dateStr; }, 60);
+}
+
+function renderKanban(){
+  const root = document.getElementById('kanban');
+  const statuses = ['Not started','In progress','Done','Blocked'];
+  const filtered = getFilteredTasks();
   root.innerHTML = statuses.map(s => {
     const tasks = filtered.filter(t => (t.status||'Not started') === s);
     return `
@@ -762,7 +905,7 @@ function renderKanban(){
       </div>`;
   }).join('');
 }
- 
+
 function renderCard(t){
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';
@@ -778,7 +921,7 @@ function renderCard(t){
       </div>
     </div>`;
 }
- 
+
 function onDragStart(e, id){ e.dataTransfer.setData('text/plain', id); e.target.classList.add('dragging'); }
 async function onDrop(e, status){
   document.querySelectorAll('.card.dragging').forEach(c=>c.classList.remove('dragging'));
@@ -789,7 +932,7 @@ async function onDrop(e, status){
   renderKanban(); refreshOverdueAlert();
   try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast('Moved'); } catch(err){ toast('Save failed', true); }
 }
- 
+
 function openTaskModal(id, defaultStatus){
   state.editingTask = id ? state.tasks.find(t=>t.id===id) : null;
   const t = state.editingTask || {
@@ -815,9 +958,9 @@ function openTaskModal(id, defaultStatus){
   document.getElementById('taskModal').classList.add('open');
   setTimeout(()=>document.getElementById('tName').focus(), 50);
 }
- 
+
 function closeTaskModal(){ document.getElementById('taskModal').classList.remove('open'); state.editingTask = null; }
- 
+
 async function saveTask(){
   const t = state.editingTask;
   if(!t){ closeTaskModal(); return; }
@@ -839,7 +982,7 @@ async function saveTask(){
   try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast('Saved'); cacheLocal(); }
   catch(e){ toast('Saved locally — sync failed', true); }
 }
- 
+
 async function deleteTask(){
   const t = state.editingTask;
   if(!t || !confirm('Delete this task?')) return;
@@ -847,7 +990,7 @@ async function deleteTask(){
   refreshAll(); closeTaskModal();
   try { await deleteRowById(SHEET_TABS.tasks, t.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
- 
+
 // ========== OVERDUE ==========
 function getOverdueTasks(){
   const today = new Date(new Date().toDateString());
@@ -857,7 +1000,7 @@ function getOverdueTasks(){
     return new Date(t.date) < today;
   });
 }
- 
+
 function refreshOverdueAlert(){
   const overdue = getOverdueTasks();
   const banner = document.getElementById('overdueBanner');
@@ -873,7 +1016,7 @@ function refreshOverdueAlert(){
     dot.classList.remove('show');
   }
 }
- 
+
 function openOverdueModal(){
   const overdue = getOverdueTasks().sort((a,b) => new Date(a.date) - new Date(b.date));
   const list = document.getElementById('overdueList');
@@ -908,9 +1051,9 @@ function openOverdueModal(){
   }
   document.getElementById('overdueModal').classList.add('open');
 }
- 
+
 function closeOverdueModal(){ document.getElementById('overdueModal').classList.remove('open'); }
- 
+
 async function rescheduleOverdue(id, daysFromToday){
   const t = state.tasks.find(x => x.id === id);
   if(!t) return;
@@ -920,7 +1063,7 @@ async function rescheduleOverdue(id, daysFromToday){
   t.updatedAt = nowIso();
   await persistTaskAndRefresh(t, daysFromToday === 0 ? 'Moved to today' : daysFromToday === 1 ? 'Moved to tomorrow' : `Moved +${daysFromToday} days`);
 }
- 
+
 async function rescheduleOverdueCustom(id, dateStr){
   if(!dateStr) return;
   const t = state.tasks.find(x => x.id === id);
@@ -928,31 +1071,31 @@ async function rescheduleOverdueCustom(id, dateStr){
   t.date = dateStr; t.updatedAt = nowIso();
   await persistTaskAndRefresh(t, 'Rescheduled to ' + formatDate(dateStr));
 }
- 
+
 async function markOverdueDone(id){
   const t = state.tasks.find(x => x.id === id);
   if(!t) return;
   t.status = 'Done'; t.updatedAt = nowIso();
   await persistTaskAndRefresh(t, 'Marked done');
 }
- 
+
 async function persistTaskAndRefresh(t, msg){
   try {
     await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
     toast(msg);
-    renderKanban(); refreshOverdueAlert(); refreshTaskCount(); cacheLocal();
+    renderTaskView(); refreshOverdueAlert(); refreshTaskCount(); cacheLocal();
     const stillOpen = document.getElementById('overdueModal').classList.contains('open');
     if(stillOpen) openOverdueModal();
   } catch(err){ toast('Save failed: ' + err.message, true); }
 }
- 
+
 function setCompanyView(v){
   state.view = v;
   document.getElementById('viewTable').classList.toggle('active', v==='table');
   document.getElementById('viewCards').classList.toggle('active', v==='cards');
   renderCompanies();
 }
- 
+
 function renderCompanies(){
   const root = document.getElementById('companiesContainer');
   const search = (document.getElementById('companySearch')?.value||'').toLowerCase();
@@ -1009,7 +1152,7 @@ function renderCompanies(){
       </div>`;
   }
 }
- 
+
 function openCompanyModal(id){
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
   const c = state.editingCompany || {
@@ -1032,9 +1175,9 @@ function openCompanyModal(id){
   document.getElementById('companyModal').classList.add('open');
   setTimeout(()=>document.getElementById('cName').focus(), 50);
 }
- 
+
 function closeCompanyModal(){ document.getElementById('companyModal').classList.remove('open'); state.editingCompany = null; }
- 
+
 async function saveCompany(){
   const c = state.editingCompany;
   if(!c){ closeCompanyModal(); return; }
@@ -1061,7 +1204,7 @@ async function saveCompany(){
   try { await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c); toast('Saved'); cacheLocal(); }
   catch(e){ toast('Saved locally — sync failed', true); }
 }
- 
+
 async function deleteCompany(){
   const c = state.editingCompany;
   if(!c || !confirm(`Delete ${c.name}? Linked tasks/visits will remain but be unlinked.`)) return;
@@ -1069,7 +1212,7 @@ async function deleteCompany(){
   refreshAll(); closeCompanyModal();
   try { await deleteRowById(SHEET_TABS.companies, c.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
- 
+
 function renderVisitsForCompany(companyId){
   const visits = state.visits.filter(v=>v.companyId===companyId).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const list = document.getElementById('visitList');
@@ -1094,7 +1237,7 @@ function renderVisitsForCompany(companyId){
     </div>
   `).join('') : '<div class="empty-mini">No linked tasks</div>';
 }
- 
+
 function openVisitModal(id){
   state.editingVisit = id ? state.visits.find(v=>v.id===id) : null;
   const c = state.editingCompany;
@@ -1112,13 +1255,13 @@ function openVisitModal(id){
   if(!id) state.editingVisit = v;
   document.getElementById('visitModal').classList.add('open');
 }
- 
+
 function closeVisitModal(){
   document.getElementById('visitModal').classList.remove('open');
   state.editingVisit = null;
   if(state.editingCompany) renderVisitsForCompany(state.editingCompany.id);
 }
- 
+
 async function saveVisit(){
   const v = state.editingVisit;
   if(!v){ closeVisitModal(); return; }
@@ -1143,7 +1286,7 @@ async function saveVisit(){
     toast('Visit logged'); cacheLocal();
   } catch(e){ toast('Saved locally — sync failed', true); }
 }
- 
+
 async function deleteVisit(){
   const v = state.editingVisit;
   if(!v || !confirm('Delete this visit?')) return;
@@ -1151,14 +1294,14 @@ async function deleteVisit(){
   closeVisitModal(); refreshAll();
   try { await deleteRowById(SHEET_TABS.visits, v.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
- 
+
 function openTaskModalForCompany(){
   if(!state.editingCompany) return;
   state.taskForCompany = state.editingCompany.id;
   closeCompanyModal();
   openTaskModal();
 }
- 
+
 function renderDashboard(){
   const stats = computeStats();
   document.getElementById('statCards').innerHTML = `
@@ -1213,7 +1356,7 @@ function renderDashboard(){
     </div>`;
   }).join('') : '<div class="empty-mini">Nothing due this week 🎉</div>';
 }
- 
+
 function computeStats(){
   const today = new Date(); today.setHours(0,0,0,0);
   const weekAgo = new Date(today); weekAgo.setDate(weekAgo.getDate()-7);
@@ -1236,7 +1379,7 @@ function computeStats(){
     winRate: quoted ? Math.round((won/quoted)*100) : 0,
   };
 }
- 
+
 function esc(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function formatDate(d){
   if(!d) return '';
@@ -1244,10 +1387,10 @@ function formatDate(d){
   if(isNaN(dt)) return d;
   return dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' });
 }
- 
+
 function initApp(){ showApp(); loadCache(); refreshAll(); initAuth(); }
 function forceSync(){ if(accessToken) pullAll(); else toast('Sign in first', true); }
- 
+
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if(e.key === 'n' || e.key === 'N'){
@@ -1256,16 +1399,16 @@ document.addEventListener('keydown', e => {
   }
   if(e.key === 'Escape'){ document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open')); }
 });
- 
+
 setInterval(()=>{ if(accessToken && document.visibilityState === 'visible') pullAll(); }, 60000);
- 
+
 loadConfig();
 if(cfg.clientId && cfg.sheetId) initApp();
 else showSetup();
- 
+
 /* ============ CHAT AGENT (v2: with business card vision) ============ */
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
- 
+
 (function chatInit(){
   const fab      = document.getElementById("chatFab");
   const panel    = document.getElementById("chatPanel");
@@ -1278,7 +1421,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
   const preview  = document.getElementById("chatPreview");
   let chatHistory = [];
   let pendingImages = [];
- 
+
   fab.addEventListener("click", () => {
     panel.classList.toggle("open");
     if (panel.classList.contains("open")) input.focus();
@@ -1290,7 +1433,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
   sendBtn.addEventListener("click", sendChat);
   attachBtn.addEventListener("click", () => fileInp.click());
   fileInp.addEventListener("change", handleFiles);
- 
+
   function bubble(text, cls){
     const d = document.createElement("div");
     d.className = "chatMsg " + cls;
@@ -1299,7 +1442,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
     msgs.scrollTop = msgs.scrollHeight;
     return d;
   }
- 
+
   async function handleFiles(e){
     const files = Array.from(e.target.files || []);
     fileInp.value = "";
@@ -1313,7 +1456,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
     }
     renderPreview();
   }
- 
+
   function compressImage(file, maxDim, quality){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -1339,7 +1482,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       reader.readAsDataURL(file);
     });
   }
- 
+
   function renderPreview(){
     if (pendingImages.length === 0){ preview.classList.remove("show"); preview.innerHTML = ""; return; }
     preview.classList.add("show");
@@ -1351,7 +1494,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
     ).join("");
   }
   window.__removeChatImg = (id) => { pendingImages = pendingImages.filter(x => x.id !== id); renderPreview(); };
- 
+
   async function sendChat(){
     const text = input.value.trim();
     const images = pendingImages.slice();
@@ -1364,7 +1507,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
     const displayText = text || `[${images.length} business card${images.length>1?'s':''} attached]`;
     bubble(displayText, "user");
     const thinking = bubble(images.length ? "Reading card(s)…" : "Thinking…", "system");
- 
+
     try {
       const context = {
         today: new Date().toISOString().slice(0,10),
@@ -1387,7 +1530,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       thinking.remove();
       if (!resp.ok) { bubble("Error: " + (data.error || "unknown"), "error"); return; }
       if (data.reply) bubble(data.reply, "assistant");
- 
+
       if (data.toolCalls && data.toolCalls.length) {
         const createdByName = {};
         for (const call of data.toolCalls) {
@@ -1408,7 +1551,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
         refreshAll();
         cacheLocal();
       }
- 
+
       chatHistory.push({ role: "user", content: text || "(business card image)" });
       if (data.reply) chatHistory.push({ role: "assistant", content: data.reply });
       if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
@@ -1420,7 +1563,7 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       input.focus();
     }
   }
- 
+
   async function executeChatToolCall(call) {
     const { name, input: args } = call;
     switch (name) {
