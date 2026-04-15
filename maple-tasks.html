@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maple MPSS — Tasks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,800&family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f1ea;
+    --bg-card: #ffffff;
+    --bg-sunken: #ebe5da;
+    --ink: #1a1a1a;
+    --ink-soft: #5c5750;
+    --ink-mute: #94908a;
+    --line: #d8d1c4;
+    --line-soft: #e8e2d5;
+    --accent: #b8451f;
+    --accent-soft: #d97548;
+    --green: #4a7c4e;
+    --yellow: #c89b3c;
+    --red: #b8451f;
+    --blue: #4a6c8a;
+    --shadow: 0 1px 2px rgba(26,26,26,.04), 0 4px 12px rgba(26,26,26,.04);
+    --shadow-lg: 0 4px 8px rgba(26,26,26,.06), 0 16px 32px rgba(26,26,26,.08);
+    --radius: 4px;
+    --radius-lg: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--line);
+    padding: 24px 32px;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+    background: rgba(245, 241, 234, 0.92);
+  }
+
+  .header-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .brand h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-style: italic;
+  }
+
+  .brand .subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .auth-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .auth-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ink-mute);
+  }
+  .auth-dot.connected { background: var(--green); box-shadow: 0 0 0 3px rgba(74,124,78,.15); }
+
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--bg-card);
+    color: var(--ink);
+    padding: 8px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-weight: 500;
+  }
+  .btn:hover { border-color: var(--ink); background: var(--bg-sunken); }
+  .btn-primary {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  .btn-primary:hover { background: var(--accent); border-color: var(--accent); color: white; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  /* Filters */
+  .filters {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .filter-label {
+    font-size: 11px;
+    color: var(--ink-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .pill {
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 100px;
+    background: transparent;
+    font-size: 12px;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+  }
+  .pill:hover { border-color: var(--ink-soft); }
+  .pill.active {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+
+  /* Board */
+  .board {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px 32px 80px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+
+  @media (max-width: 1024px) {
+    .board { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .board { grid-template-columns: 1fr; padding: 16px; }
+    .header { padding: 16px; }
+    .filters { padding: 12px 16px; }
+  }
+
+  .column {
+    background: var(--bg-sunken);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    min-height: 400px;
+    transition: background 0.15s;
+  }
+  .column.drag-over {
+    background: rgba(184, 69, 31, 0.08);
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+  }
+
+  .column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 12px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 12px;
+  }
+
+  .column-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .status-dot.not-started { background: var(--ink-mute); }
+  .status-dot.in-progress { background: var(--yellow); }
+  .status-dot.done { background: var(--green); }
+  .status-dot.blocked { background: var(--red); }
+
+  .column-title h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+    background: var(--bg-card);
+    padding: 2px 8px;
+    border-radius: 100px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow);
+    cursor: grab;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+  .card:hover {
+    border-color: var(--line);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-lg);
+  }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: 0.4; }
+
+  .card-title {
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.35;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+
+  .card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+  }
+  .tag-cat { background: rgba(74,108,138,.12); color: var(--blue); }
+  .tag-cat.maple { background: rgba(184,69,31,.12); color: var(--accent); }
+  .tag-cat.linkedin { background: rgba(200,155,60,.18); color: #8a6a1f; }
+  .tag-cat.business { background: rgba(74,124,78,.15); color: var(--green); }
+  .tag-cat.client { background: rgba(74,108,138,.12); color: var(--blue); }
+  .tag-cat.jobs { background: rgba(108,74,138,.12); color: #6c4a8a; }
+  .tag-cat.ai { background: rgba(184,69,31,.10); color: var(--accent-soft); }
+
+  .priority {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+  }
+  .priority.urgent, .priority.high { background: var(--red); }
+  .priority.medium { background: var(--yellow); }
+  .priority.low { background: var(--ink-mute); }
+
+  .meta-bit {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .assignee {
+    font-size: 10px;
+    background: var(--bg-sunken);
+    padding: 2px 6px;
+    border-radius: 100px;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  /* New task input */
+  .new-task {
+    background: transparent;
+    border: 1px dashed var(--line);
+    color: var(--ink-mute);
+    padding: 8px;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    font-size: 13px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .new-task:hover {
+    border-color: var(--ink-soft);
+    color: var(--ink);
+    background: var(--bg-card);
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,26,.4);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 520px;
+    padding: 28px;
+    box-shadow: var(--shadow-lg);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 22px;
+    margin-bottom: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .field {
+    margin-bottom: 16px;
+  }
+  .field label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-mute);
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .field input, .field select, .field textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-family: inherit;
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--ink);
+    transition: border 0.15s;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--ink);
+  }
+  .field textarea { min-height: 80px; resize: vertical; }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .modal-actions .left, .modal-actions .right {
+    display: flex;
+    gap: 8px;
+  }
+
+  .danger {
+    color: var(--red);
+    border-color: transparent;
+    background: transparent;
+  }
+  .danger:hover {
+    background: rgba(184,69,31,.08);
+    border-color: var(--red);
+  }
+
+  /* Sync banner */
+  .sync-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-mute);
+  }
+  .sync-status.syncing { color: var(--yellow); }
+  .sync-status.synced { color: var(--green); }
+  .sync-status.error { color: var(--red); }
+
+  /* Setup screen */
+  .setup-screen {
+    max-width: 720px;
+    margin: 60px auto;
+    padding: 0 32px;
+  }
+  .setup-screen h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 42px;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .setup-screen .lede {
+    font-size: 17px;
+    color: var(--ink-soft);
+    margin-bottom: 32px;
+    line-height: 1.55;
+  }
+  .setup-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .setup-card h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 18px;
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+  .setup-card ol {
+    margin: 12px 0 16px 20px;
+    color: var(--ink-soft);
+  }
+  .setup-card li { margin-bottom: 8px; line-height: 1.55; }
+  .setup-card code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: var(--bg-sunken);
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: var(--ink);
+  }
+  .setup-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: var(--bg);
+    margin-top: 8px;
+  }
+  .setup-input:focus { outline: none; border-color: var(--ink); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--ink-mute);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============= SETUP SCREEN ============= -->
+<div id="setup" class="setup-screen" style="display:none">
+  <h1>One-time setup</h1>
+  <p class="lede">To sync tasks with Google Calendar, you'll need to create a free Google Cloud project. Takes about 5 minutes.</p>
+
+  <div class="setup-card">
+    <h3>Step 1 — Create OAuth credentials</h3>
+    <ol>
+      <li>Go to <a href="https://console.cloud.google.com/projectcreate" target="_blank">console.cloud.google.com</a> and create a project (name it "Maple Tasks")</li>
+      <li>Open <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank">Calendar API library</a> → click <strong>Enable</strong></li>
+      <li>Open <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank">OAuth consent screen</a> → choose <strong>External</strong>, fill in name/email, save</li>
+      <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Credentials</a> → <strong>+ Create Credentials</strong> → <strong>OAuth Client ID</strong> → Application type: <strong>Web application</strong></li>
+      <li>Under "Authorized JavaScript origins", add the URL where you'll host this file (e.g., <code>https://yourname.github.io</code> or <code>http://localhost:8000</code> for testing)</li>
+      <li>Copy the <strong>Client ID</strong> (looks like <code>123456789-abc.apps.googleusercontent.com</code>)</li>
+    </ol>
+  </div>
+
+  <div class="setup-card">
+    <h3>Step 2 — Paste your Client ID below</h3>
+    <input type="text" id="clientIdInput" class="setup-input" placeholder="123456789-abc.apps.googleusercontent.com">
+
+    <h3 style="margin-top:20px">Step 3 — Calendar to sync to (optional)</h3>
+    <p style="color:var(--ink-soft); font-size:13px; margin-top:4px">Leave blank for primary calendar, or paste a calendar ID (settings → integrate calendar)</p>
+    <input type="text" id="calendarIdInput" class="setup-input" placeholder="primary  (or  abc123@group.calendar.google.com)" value="primary">
+
+    <button class="btn btn-primary" style="margin-top:20px" onclick="saveSetup()">Save & Continue</button>
+  </div>
+
+  <div class="setup-card">
+    <h3>Tip — share with your dad</h3>
+    <p style="color:var(--ink-soft)">Create a <strong>shared Google Calendar</strong> first (e.g., "Maple MPSS Tasks"), share it with both your accounts with edit permissions, then paste its calendar ID above. Both of you will see and edit the same tasks live.</p>
+  </div>
+</div>
+
+<!-- ============= MAIN APP ============= -->
+<div id="app" style="display:none">
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <h1>Maple Tasks</h1>
+        <span class="subtitle">A shared workspace</span>
+      </div>
+      <div class="header-actions">
+        <span class="sync-status" id="syncStatus">offline</span>
+        <div class="auth-status">
+          <span class="auth-dot" id="authDot"></span>
+          <span id="authText">not signed in</span>
+        </div>
+        <button class="btn btn-sm" id="authBtn" onclick="handleAuth()">Sign in with Google</button>
+        <button class="btn btn-sm" onclick="syncFromCalendar()">↻ Sync</button>
+        <button class="btn btn-sm" onclick="resetSetup()" title="Change Client ID">⚙</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="filters">
+    <span class="filter-label">Category</span>
+    <div class="filter-pills" id="categoryFilters">
+      <button class="pill active" data-cat="all" onclick="filterBy('cat','all')">All</button>
+      <button class="pill" data-cat="Job Applications" onclick="filterBy('cat','Job Applications')">Jobs</button>
+      <button class="pill" data-cat="AI & PMP Study" onclick="filterBy('cat','AI & PMP Study')">AI & PMP</button>
+      <button class="pill" data-cat="Business Systems" onclick="filterBy('cat','Business Systems')">Business</button>
+      <button class="pill" data-cat="LinkedIn & Profile" onclick="filterBy('cat','LinkedIn & Profile')">LinkedIn</button>
+      <button class="pill" data-cat="Client Outreach" onclick="filterBy('cat','Client Outreach')">Outreach</button>
+      <button class="pill" data-cat="Maple MPSS" onclick="filterBy('cat','Maple MPSS')">Maple</button>
+    </div>
+
+    <span class="filter-label" style="margin-left:16px">Assignee</span>
+    <div class="filter-pills">
+      <button class="pill active" data-assignee="all" onclick="filterBy('assignee','all')">All</button>
+      <button class="pill" data-assignee="Son" onclick="filterBy('assignee','Son')">Son</button>
+      <button class="pill" data-assignee="Dad" onclick="filterBy('assignee','Dad')">Dad</button>
+      <button class="pill" data-assignee="Both" onclick="filterBy('assignee','Both')">Both</button>
+    </div>
+  </div>
+
+  <div class="board" id="board">
+    <div class="column" data-status="Not started" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'Not started')">
+      <div class="column-header">
+        <div class="column-title"><span class="status-dot not-started"></span><h2>Not started</h2></div>
+        <span class="count" id="count-Not started">0</span>
+      </div>
+      <div class="cards" id="col-Not started"></div>
+      <button class="new-task" onclick="openNewTask('Not started')">+ Add task</button>
+    </div>
+
+    <div class="column" data-status="In progress" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'In progress')">
+      <div class="column-header">
+        <div class="column-title"><span class="status-dot in-progress"></span><h2>In progress</h2></div>
+        <span class="count" id="count-In progress">0</span>
+      </div>
+      <div class="cards" id="col-In progress"></div>
+      <button class="new-task" onclick="openNewTask('In progress')">+ Add task</button>
+    </div>
+
+    <div class="column" data-status="Done" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'Done')">
+      <div class="column-header">
+        <div class="column-title"><span class="status-dot done"></span><h2>Done</h2></div>
+        <span class="count" id="count-Done">0</span>
+      </div>
+      <div class="cards" id="col-Done"></div>
+      <button class="new-task" onclick="openNewTask('Done')">+ Add task</button>
+    </div>
+
+    <div class="column" data-status="Blocked" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'Blocked')">
+      <div class="column-header">
+        <div class="column-title"><span class="status-dot blocked"></span><h2>Blocked</h2></div>
+        <span class="count" id="count-Blocked">0</span>
+      </div>
+      <div class="cards" id="col-Blocked"></div>
+      <button class="new-task" onclick="openNewTask('Blocked')">+ Add task</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============= MODAL ============= -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modalTitle">New task</h2>
+    <input type="hidden" id="taskId">
+    <div class="field">
+      <label>Task name</label>
+      <input type="text" id="fName" placeholder="What needs to be done?">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Status</label>
+        <select id="fStatus">
+          <option>Not started</option>
+          <option>In progress</option>
+          <option>Done</option>
+          <option>Blocked</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="fPriority">
+          <option>Low</option>
+          <option>Medium</option>
+          <option>High</option>
+          <option>Urgent</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Category</label>
+        <select id="fCategory">
+          <option>Job Applications</option>
+          <option>AI & PMP Study</option>
+          <option>Business Systems</option>
+          <option>LinkedIn & Profile</option>
+          <option>Client Outreach</option>
+          <option>Maple MPSS</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Assignee</label>
+        <select id="fAssignee">
+          <option>Son</option>
+          <option>Dad</option>
+          <option>Both</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="fDate">
+      </div>
+      <div class="field">
+        <label>Duration (hrs)</label>
+        <input type="number" step="0.25" id="fDuration" placeholder="e.g. 2">
+      </div>
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="fNotes" placeholder="Details, links, context..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <div class="left">
+        <button class="btn danger" id="deleteBtn" onclick="deleteTask()">Delete</button>
+      </div>
+      <div class="right">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTask()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+const STORAGE_KEY = 'maple_tasks_v1';
+const SETTINGS_KEY = 'maple_tasks_settings_v1';
+let tasks = [];
+let settings = { clientId: '', calendarId: 'primary' };
+let filters = { cat: 'all', assignee: 'all' };
+let editingId = null;
+let tokenClient = null;
+let accessToken = null;
+
+// Pre-loaded unique tasks from your Notion DB
+const SEED_TASKS = [
+  { id: 't1', name: 'Create AI Agent to Apply Jobs', status: 'Not started', priority: 'High', category: 'Job Applications', assignee: 'Son', date: '2026-04-19', duration: 12, notes: '12 hours over 3 days. Build AI agent to auto-search, match, and apply for relevant job listings.' },
+  { id: 't2', name: 'Make Zoho System Work', status: 'In progress', priority: 'Urgent', category: 'Business Systems', assignee: 'Both', date: '2026-04-15', duration: 16, notes: 'Renew domain via correct Hostinger account. Set up Zoho Mail for maplempss.com. Add DNS records.' },
+  { id: 't3', name: 'Update Maplempss Website', status: 'Not started', priority: 'High', category: 'Maple MPSS', assignee: 'Son', date: '', duration: 8, notes: '' },
+  { id: 't4', name: 'Update CRM After Each Visit', status: 'Not started', priority: 'Medium', category: 'Client Outreach', assignee: 'Both', date: '', duration: 0.5, notes: '30 min per visit, recurring' },
+  { id: 't5', name: 'Follow Up on Companies Visited', status: 'Not started', priority: 'High', category: 'Client Outreach', assignee: 'Both', date: '', duration: 3, notes: 'LinkedIn + email outreach to Edson Packaging, Orlick, JMC, Capo, RJP. 3hrs per session.' },
+  { id: 't6', name: 'Create LinkedIn post #1 for Maple MPSS', status: 'Done', priority: 'Medium', category: 'LinkedIn & Profile', assignee: 'Son', date: '', duration: 1, notes: '' },
+  { id: 't7', name: 'Create LinkedIn post #2 for Maple MPSS', status: 'Not started', priority: 'Medium', category: 'LinkedIn & Profile', assignee: 'Son', date: '', duration: 1, notes: '' },
+  { id: 't8', name: 'Update LinkedIn page for Maple MPSS', status: 'Done', priority: 'Medium', category: 'LinkedIn & Profile', assignee: 'Son', date: '', duration: 2, notes: '' },
+  { id: 't9', name: 'Company visits — Burlington/Hamilton', status: 'Not started', priority: 'High', category: 'Client Outreach', assignee: 'Dad', date: '', duration: 6, notes: 'Target semi-large packaging machinery and precision parts companies. Use proximity-based routing.' },
+  { id: 't10', name: 'Daily AI for PMP Study (2pm–6pm)', status: 'In progress', priority: 'Medium', category: 'AI & PMP Study', assignee: 'Son', date: '', duration: 4, notes: 'Recurring daily session, 4 hours' },
+];
+
+// ===================== INIT =====================
+function init() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  tasks = saved ? JSON.parse(saved) : SEED_TASKS;
+
+  const savedSettings = localStorage.getItem(SETTINGS_KEY);
+  if (savedSettings) {
+    settings = JSON.parse(savedSettings);
+    showApp();
+  } else {
+    showSetup();
+  }
+  render();
+}
+
+function showSetup() {
+  document.getElementById('setup').style.display = 'block';
+  document.getElementById('app').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  if (settings.clientId) loadGoogleScripts();
+}
+
+function saveSetup() {
+  const cid = document.getElementById('clientIdInput').value.trim();
+  const calId = document.getElementById('calendarIdInput').value.trim() || 'primary';
+  if (!cid) { alert('Please paste your Client ID first'); return; }
+  settings = { clientId: cid, calendarId: calId };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  showApp();
+}
+
+function resetSetup() {
+  if (!confirm('Reset Google Cloud setup? Your tasks will be kept.')) return;
+  localStorage.removeItem(SETTINGS_KEY);
+  location.reload();
+}
+
+// ===================== RENDER =====================
+function render() {
+  ['Not started', 'In progress', 'Done', 'Blocked'].forEach(status => {
+    const col = document.getElementById('col-' + status);
+    col.innerHTML = '';
+    const filtered = tasks.filter(t => t.status === status && passFilters(t));
+    document.getElementById('count-' + status).textContent = filtered.length;
+    filtered.forEach(t => col.appendChild(cardEl(t)));
+  });
+}
+
+function passFilters(t) {
+  if (filters.cat !== 'all' && t.category !== filters.cat) return false;
+  if (filters.assignee !== 'all' && t.assignee !== filters.assignee) return false;
+  return true;
+}
+
+function cardEl(t) {
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.draggable = true;
+  el.dataset.id = t.id;
+  el.ondragstart = e => onDragStart(e, t.id);
+  el.ondragend = e => e.target.classList.remove('dragging');
+  el.onclick = () => openEdit(t.id);
+
+  const catClass = ({
+    'Maple MPSS': 'maple', 'LinkedIn & Profile': 'linkedin',
+    'Business Systems': 'business', 'Client Outreach': 'client',
+    'Job Applications': 'jobs', 'AI & PMP Study': 'ai'
+  })[t.category] || '';
+
+  el.innerHTML = `
+    <div class="card-title">${escapeHtml(t.name)}</div>
+    <div class="card-meta">
+      ${t.priority ? `<span class="priority ${t.priority.toLowerCase()}" title="${t.priority}"></span>` : ''}
+      <span class="tag tag-cat ${catClass}">${escapeHtml(t.category || '—')}</span>
+      ${t.assignee ? `<span class="assignee">${escapeHtml(t.assignee)}</span>` : ''}
+      ${t.date ? `<span class="meta-bit">📅 ${formatDate(t.date)}</span>` : ''}
+      ${t.duration ? `<span class="meta-bit">⏱ ${t.duration}h</span>` : ''}
+    </div>
+  `;
+  return el;
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// ===================== FILTERS =====================
+function filterBy(type, value) {
+  filters[type] = value;
+  document.querySelectorAll(`[data-${type === 'cat' ? 'cat' : 'assignee'}]`).forEach(p => {
+    p.classList.toggle('active', p.dataset[type === 'cat' ? 'cat' : 'assignee'] === value);
+  });
+  render();
+}
+
+// ===================== DRAG & DROP =====================
+let dragId = null;
+function onDragStart(e, id) {
+  dragId = id;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function onDrop(e, status) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const t = tasks.find(x => x.id === dragId);
+  if (t && t.status !== status) {
+    t.status = status;
+    persist();
+    render();
+    if (accessToken) syncTaskToCalendar(t);
+  }
+  dragId = null;
+}
+
+// ===================== MODAL =====================
+function openNewTask(status) {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'New task';
+  document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('fName').value = '';
+  document.getElementById('fStatus').value = status || 'Not started';
+  document.getElementById('fPriority').value = 'Medium';
+  document.getElementById('fCategory').value = 'Maple MPSS';
+  document.getElementById('fAssignee').value = 'Son';
+  document.getElementById('fDate').value = '';
+  document.getElementById('fDuration').value = '';
+  document.getElementById('fNotes').value = '';
+  document.getElementById('modalOverlay').classList.add('open');
+  setTimeout(() => document.getElementById('fName').focus(), 50);
+}
+
+function openEdit(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit task';
+  document.getElementById('deleteBtn').style.display = 'inline-block';
+  document.getElementById('fName').value = t.name || '';
+  document.getElementById('fStatus').value = t.status || 'Not started';
+  document.getElementById('fPriority').value = t.priority || 'Medium';
+  document.getElementById('fCategory').value = t.category || 'Maple MPSS';
+  document.getElementById('fAssignee').value = t.assignee || 'Son';
+  document.getElementById('fDate').value = t.date || '';
+  document.getElementById('fDuration').value = t.duration || '';
+  document.getElementById('fNotes').value = t.notes || '';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  editingId = null;
+}
+
+function saveTask() {
+  const data = {
+    name: document.getElementById('fName').value.trim(),
+    status: document.getElementById('fStatus').value,
+    priority: document.getElementById('fPriority').value,
+    category: document.getElementById('fCategory').value,
+    assignee: document.getElementById('fAssignee').value,
+    date: document.getElementById('fDate').value,
+    duration: parseFloat(document.getElementById('fDuration').value) || 0,
+    notes: document.getElementById('fNotes').value.trim(),
+  };
+  if (!data.name) { alert('Task name is required'); return; }
+
+  if (editingId) {
+    const t = tasks.find(x => x.id === editingId);
+    Object.assign(t, data);
+    if (accessToken) syncTaskToCalendar(t);
+  } else {
+    const newTask = { id: 't' + Date.now(), ...data };
+    tasks.push(newTask);
+    if (accessToken) syncTaskToCalendar(newTask);
+  }
+  persist();
+  render();
+  closeModal();
+}
+
+function deleteTask() {
+  if (!editingId) return;
+  if (!confirm('Delete this task?')) return;
+  const t = tasks.find(x => x.id === editingId);
+  tasks = tasks.filter(x => x.id !== editingId);
+  persist();
+  render();
+  closeModal();
+  if (accessToken && t && t.gcalId) deleteFromCalendar(t.gcalId);
+}
+
+function persist() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+}
+
+// ===================== GOOGLE CALENDAR =====================
+function loadGoogleScripts() {
+  if (window.google && window.gapi) { initGoogle(); return; }
+  const s1 = document.createElement('script');
+  s1.src = 'https://accounts.google.com/gsi/client';
+  s1.onload = () => {
+    const s2 = document.createElement('script');
+    s2.src = 'https://apis.google.com/js/api.js';
+    s2.onload = initGoogle;
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
+
+function initGoogle() {
+  gapi.load('client', async () => {
+    await gapi.client.init({
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest']
+    });
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: settings.clientId,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      callback: tokenResponse => {
+        accessToken = tokenResponse.access_token;
+        setAuthState(true);
+        syncFromCalendar();
+      },
+    });
+    setSyncStatus('ready', '');
+  });
+}
+
+function handleAuth() {
+  if (accessToken) {
+    google.accounts.oauth2.revoke(accessToken);
+    accessToken = null;
+    setAuthState(false);
+  } else {
+    if (!tokenClient) { alert('Google Calendar not loaded yet — try again in a moment'); return; }
+    tokenClient.requestAccessToken();
+  }
+}
+
+function setAuthState(connected) {
+  document.getElementById('authDot').classList.toggle('connected', connected);
+  document.getElementById('authText').textContent = connected ? 'connected' : 'not signed in';
+  document.getElementById('authBtn').textContent = connected ? 'Sign out' : 'Sign in with Google';
+}
+
+function setSyncStatus(state, msg) {
+  const el = document.getElementById('syncStatus');
+  el.className = 'sync-status ' + state;
+  el.textContent = msg || state;
+}
+
+async function syncTaskToCalendar(task) {
+  if (!accessToken || !task.date) return;
+  setSyncStatus('syncing', 'syncing...');
+  try {
+    const event = taskToEvent(task);
+    let response;
+    if (task.gcalId) {
+      response = await gapi.client.calendar.events.update({
+        calendarId: settings.calendarId,
+        eventId: task.gcalId,
+        resource: event
+      });
+    } else {
+      response = await gapi.client.calendar.events.insert({
+        calendarId: settings.calendarId,
+        resource: event
+      });
+      task.gcalId = response.result.id;
+      persist();
+    }
+    setSyncStatus('synced', '✓ synced');
+  } catch (err) {
+    console.error(err);
+    setSyncStatus('error', 'sync error');
+  }
+}
+
+async function deleteFromCalendar(eventId) {
+  try {
+    await gapi.client.calendar.events.delete({
+      calendarId: settings.calendarId,
+      eventId: eventId
+    });
+  } catch (err) { console.error(err); }
+}
+
+function taskToEvent(t) {
+  const dur = t.duration || 1;
+  const start = new Date(t.date + 'T09:00:00');
+  const end = new Date(start.getTime() + dur * 60 * 60 * 1000);
+  return {
+    summary: `[${t.status === 'Done' ? '✓' : '○'}] ${t.name}`,
+    description: `Category: ${t.category}\nAssignee: ${t.assignee}\nPriority: ${t.priority}\nStatus: ${t.status}\n\n${t.notes || ''}\n\n— Maple Tasks`,
+    start: { dateTime: start.toISOString() },
+    end: { dateTime: end.toISOString() },
+    colorId: { 'Urgent': '11', 'High': '6', 'Medium': '5', 'Low': '8' }[t.priority] || '1',
+  };
+}
+
+async function syncFromCalendar() {
+  if (!accessToken) { alert('Sign in with Google first'); return; }
+  setSyncStatus('syncing', 'syncing...');
+  try {
+    // Push any local tasks with dates that don't have a gcalId yet
+    for (const t of tasks) {
+      if (t.date && !t.gcalId) {
+        await syncTaskToCalendar(t);
+      }
+    }
+    setSyncStatus('synced', '✓ synced ' + new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}));
+  } catch (err) {
+    console.error(err);
+    setSyncStatus('error', 'sync error');
+  }
+}
+
+// ===================== KEYBOARD =====================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'n' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && !document.getElementById('modalOverlay').classList.contains('open')) {
+    openNewTask('Not started');
+  }
+});
+
+// ===================== START =====================
+init();
+</script>
+</body>
+</html>
