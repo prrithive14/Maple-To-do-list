@@ -541,7 +541,9 @@ let state = {
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
 };
-let cfg = {};
+let cfg = { clientId: '43641250256-l4ti5l2lfvadbsmju4juh0fln91aib09.apps.googleusercontent.com',
+  sheetId: '1sCWFN8QYJkB8VNd1WcdKZ5vRyps5qn3iI4AYZ-GfnA0',
+  calendarId: 'primary'};
 let accessToken = null;
 let tokenClient = null;
 let syncing = false;
@@ -1574,9 +1576,7 @@ document.addEventListener('keydown', e => {
 
 setInterval(()=>{ if(accessToken && document.visibilityState === 'visible') pullAll(); }, 60000);
 
-loadConfig();
-if(cfg.clientId && cfg.sheetId) initApp();
-else showSetup();
+initApp();
 
 /* ============ CHAT AGENT (v2: with business card vision) ============ */
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
