@@ -1116,7 +1116,7 @@ async function persistTaskAndRefresh(t, msg){
 
 // ========== GOOGLE DRIVE FILE ATTACHMENTS ==========
 const MAPLE_ROOT_FOLDER_NAME = 'Maple MPSS';
-let mapleRootFolderId = null;
+let mapleRootFolderId = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 
 async function driveRequest(url, opts = {}){
   const r = await fetch(url, {
@@ -1148,8 +1148,6 @@ async function findOrCreateFolder(name, parentId){
 }
 
 async function getMapleRootFolder(){
-  if(mapleRootFolderId) return mapleRootFolderId;
-  mapleRootFolderId = await findOrCreateFolder(MAPLE_ROOT_FOLDER_NAME, null);
   return mapleRootFolderId;
 }
 
