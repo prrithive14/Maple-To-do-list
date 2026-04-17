@@ -180,7 +180,6 @@
   .overdue-actions button:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
   .overdue-actions .done-btn:hover{background:var(--green);border-color:var(--green)}
   .overdue-actions .custom-date{padding:5px 8px;font-size:12px;border:1px solid var(--line);border-radius:var(--radius)}
-  /* Company file attachments */
   .file-section{margin-top:16px}
   .file-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px}
   .file-card{background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);padding:8px;font-size:12px;display:flex;flex-direction:column;gap:4px;cursor:pointer;transition:all .15s;text-decoration:none;color:var(--ink)}
@@ -301,6 +300,7 @@
   <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+  <button class="tab" data-tab="archive" onclick="switchTab('archive')">📦 Archive <span class="count" id="countArchive">0</span></button>
 </nav>
 
 <main class="main">
@@ -372,6 +372,19 @@
       <div class="dash-panel"><h3 class="panel-title">Tasks due this week</h3><div id="dueThisWeek"></div></div>
     </div>
   </section>
+
+  <section id="tab-archive" class="tab-pane" style="display:none">
+    <div class="filters" style="margin-bottom:16px">
+      <input class="search-input" id="archiveSearch" placeholder="Search archived tasks…" oninput="renderArchive()">
+      <select class="filter-select" id="filterArchiveReason" onchange="renderArchive()">
+        <option value="">All reasons</option>
+        <option value="completed">Auto-archived (completed)</option>
+        <option value="deleted">Deleted</option>
+        <option value="manual">Manually archived</option>
+      </select>
+    </div>
+    <div id="archiveContainer"></div>
+  </section>
 </main>
 </div>
 
@@ -399,7 +412,10 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-danger" id="tDelete" onclick="deleteTask()" style="display:none">Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-danger" id="tDelete" onclick="deleteTask()" style="display:none">Delete</button>
+        <button class="btn" id="tArchive" onclick="manualArchiveTask()" style="display:none">📦 Archive</button>
+      </div>
       <div style="display:flex;gap:8px;margin-left:auto">
         <button class="btn" onclick="closeTaskModal()">Cancel</button>
         <button class="btn btn-primary" onclick="saveTask()">Save</button>
@@ -507,9 +523,7 @@
       <div class="overdue-list" id="overdueList"></div>
     </div>
     <div class="modal-footer">
-      <div style="display:flex;gap:8px;margin-left:auto">
-        <button class="btn" onclick="closeOverdueModal()">Close</button>
-      </div>
+      <div style="display:flex;gap:8px;margin-left:auto"><button class="btn" onclick="closeOverdueModal()">Close</button></div>
     </div>
   </div>
 </div>
@@ -534,10 +548,10 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive.file';
-const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks' };
+const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', archive: 'Archive' };
 
 let state = {
-  companies: [], visits: [], tasks: [],
+  companies: [], visits: [], tasks: [], archived: [],
   view: 'table', taskScope: 'all', taskView: 'kanban', currentTab: 'tasks',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
@@ -590,28 +604,21 @@ function toast(msg, isError){
   t._timer = setTimeout(() => t.className = 'toast', 2500);
 }
 
-// ========== AUTH (with auto sign-in / silent refresh) ==========
 function initAuth(){
   if (typeof google === 'undefined' || !google.accounts) { setTimeout(initAuth, 200); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: cfg.clientId,
-    scope: SCOPES,
+    client_id: cfg.clientId, scope: SCOPES,
     callback: (resp) => {
       if(resp.error){
         if(resp.error === 'popup_closed_by_user' || resp.error === 'access_denied'){
-          setSync('', 'Not signed in');
-          document.getElementById('signInBtn').style.display = 'inline-flex';
-          return;
+          setSync('', 'Not signed in'); document.getElementById('signInBtn').style.display = 'inline-flex'; return;
         }
-        setSync('', 'Not signed in');
-        document.getElementById('signInBtn').style.display = 'inline-flex';
-        if(resp.error !== 'immediate_failed'){ toast('Sign-in failed: '+resp.error, true); }
-        return;
+        setSync('', 'Not signed in'); document.getElementById('signInBtn').style.display = 'inline-flex';
+        if(resp.error !== 'immediate_failed'){ toast('Sign-in failed: '+resp.error, true); } return;
       }
       accessToken = resp.access_token;
       document.getElementById('signInBtn').style.display = 'none';
-      setSync('connected', 'Connected');
-      pullAll();
+      setSync('connected', 'Connected'); pullAll();
       const expiresIn = (resp.expires_in || 3600) * 1000;
       if(tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
       tokenRefreshTimer = setTimeout(silentRefresh, Math.max(60000, expiresIn - 5*60*1000));
@@ -623,10 +630,7 @@ function initAuth(){
 function silentRefresh(){
   if(!tokenClient) return;
   try { tokenClient.requestAccessToken({ prompt: '' }); }
-  catch(e){
-    console.warn('Silent refresh failed', e);
-    document.getElementById('signInBtn').style.display = 'inline-flex';
-  }
+  catch(e){ console.warn('Silent refresh failed', e); document.getElementById('signInBtn').style.display = 'inline-flex'; }
 }
 
 function googleSignIn(){
@@ -635,9 +639,9 @@ function googleSignIn(){
   tokenClient.requestAccessToken({ prompt });
 }
 
-function setSync(state, text){
+function setSync(s, text){
   const el = document.getElementById('syncStatus');
-  el.className = 'sync-status ' + state;
+  el.className = 'sync-status ' + s;
   document.getElementById('syncText').textContent = text;
 }
 
@@ -645,8 +649,7 @@ async function sheetsRead(range){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
   if(!r.ok) throw new Error('Read failed: '+r.status);
-  const j = await r.json();
-  return j.values || [];
+  return (await r.json()).values || [];
 }
 async function sheetsWrite(range, values){
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`;
@@ -661,6 +664,7 @@ async function sheetsAppend(range, values){
 }
 
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt'];
+const ARCHIVE_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','archivedAt','archiveReason'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
 
@@ -671,28 +675,29 @@ async function pullAll(){
   if(!accessToken) return;
   setSync('syncing','Syncing…');
   try {
-    const [tRows, cRows, vRows] = await Promise.all([
+    const [tRows, cRows, vRows, aRows] = await Promise.all([
       sheetsRead(`${SHEET_TABS.tasks}!A2:Z`),
       sheetsRead(`${SHEET_TABS.companies}!A2:Z`),
       sheetsRead(`${SHEET_TABS.visits}!A2:Z`),
+      sheetsRead(`${SHEET_TABS.archive}!A2:Z`).catch(() => []),
     ]);
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
     state.visits = vRows.filter(r=>r[0]).map(r=>rowToObj(r, VISIT_COLS));
+    state.archived = aRows.filter(r=>r[0]).map(r=>rowToObj(r, ARCHIVE_COLS));
     cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+    autoArchiveOldDone();
   } catch(e){
-    console.error(e);
-    setSync('error','Sync failed');
-    toast('Sync failed: '+e.message, true);
+    console.error(e); setSync('error','Sync failed'); toast('Sync failed: '+e.message, true);
   }
 }
 
-function cacheLocal(){ localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, when: Date.now() })); }
+function cacheLocal(){ localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, archived: state.archived, when: Date.now() })); }
 function loadCache(){
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
-    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; }
+    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.archived = c.archived||[]; }
   } catch(e){}
 }
 
@@ -715,15 +720,109 @@ function tabKeyForName(tab){
   if(tab===SHEET_TABS.tasks) return 'tasks';
   if(tab===SHEET_TABS.companies) return 'companies';
   if(tab===SHEET_TABS.visits) return 'visits';
+  if(tab===SHEET_TABS.archive) return 'archived';
 }
 function colLetter(n){ let s = ''; while(n > 0){ const m = (n-1)%26; s = String.fromCharCode(65+m) + s; n = Math.floor((n-1)/26); } return s; }
+
 async function deleteRowById(tab, id){
   const idx = await findRowIndex(tab, id);
   if(idx < 0) return;
-  const numCols = (tab===SHEET_TABS.tasks?TASK_COLS:tab===SHEET_TABS.companies?COMPANY_COLS:VISIT_COLS).length;
-  await sheetsWrite(`${tab}!A${idx}:${colLetter(numCols)}${idx}`, [Array(numCols).fill('')]);
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(sheetId,title))`;
+  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
+  const meta = await metaResp.json();
+  const sheet = meta.sheets.find(s => s.properties.title === tab);
+  if(!sheet) return;
+  const sheetId = sheet.properties.sheetId;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: idx - 1, endIndex: idx } } }] })
+  });
 }
 
+// ========== ARCHIVE SYSTEM ==========
+async function archiveTask(taskId, reason) {
+  const t = state.tasks.find(x => x.id === taskId);
+  if (!t) throw new Error("Task not found: " + taskId);
+  const archiveRecord = { ...t, archivedAt: nowIso(), archiveReason: reason };
+  await sheetsAppend(`${SHEET_TABS.archive}!A:${colLetter(ARCHIVE_COLS.length)}`, [objToRow(archiveRecord, ARCHIVE_COLS)]);
+  await deleteRowById(SHEET_TABS.tasks, taskId);
+  state.tasks = state.tasks.filter(x => x.id !== taskId);
+  state.archived.push(archiveRecord);
+  return t;
+}
+
+async function restoreTask(taskId) {
+  const a = state.archived.find(x => x.id === taskId);
+  if (!a) throw new Error("Archived task not found: " + taskId);
+  const t = {};
+  TASK_COLS.forEach(col => t[col] = a[col] || '');
+  t.status = (a.status === 'Done') ? 'Not started' : a.status;
+  t.updatedAt = nowIso();
+  await sheetsAppend(`${SHEET_TABS.tasks}!A:${colLetter(TASK_COLS.length)}`, [objToRow(t, TASK_COLS)]);
+  await deleteRowById(SHEET_TABS.archive, taskId);
+  state.archived = state.archived.filter(x => x.id !== taskId);
+  state.tasks.push(t);
+  return t;
+}
+
+async function autoArchiveOldDone() {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+  const cutoffStr = cutoff.toISOString();
+  const toArchive = state.tasks.filter(t => t.status === 'Done' && t.updatedAt && t.updatedAt < cutoffStr);
+  if (toArchive.length === 0) return;
+  for (const t of toArchive) {
+    try { await archiveTask(t.id, 'completed'); } catch (e) { console.error('Auto-archive failed for', t.id, e); }
+  }
+  toast(`Auto-archived ${toArchive.length} completed task${toArchive.length > 1 ? 's' : ''}`);
+  refreshAll(); cacheLocal();
+}
+
+async function manualArchiveTask(){
+  const t = state.editingTask;
+  if(!t) return;
+  closeTaskModal();
+  try { await archiveTask(t.id, 'manual'); refreshAll(); cacheLocal(); toast('Archived "' + t.name + '"'); }
+  catch(e){ toast('Archive failed: ' + e.message, true); }
+}
+
+async function handleRestore(taskId){
+  if(!confirm('Restore this task back to active tasks?')) return;
+  try { const t = await restoreTask(taskId); refreshAll(); cacheLocal(); toast('Restored "' + t.name + '"'); }
+  catch(e){ toast('Restore failed: ' + e.message, true); }
+}
+
+function renderArchive(){
+  const root = document.getElementById('archiveContainer');
+  if(!root) return;
+  const search = (document.getElementById('archiveSearch')?.value || '').toLowerCase();
+  const reason = document.getElementById('filterArchiveReason')?.value || '';
+  const filtered = state.archived.filter(a => {
+    if(search && !(a.name||'').toLowerCase().includes(search) && !(a.notes||'').toLowerCase().includes(search)) return false;
+    if(reason && a.archiveReason !== reason) return false;
+    return true;
+  }).sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
+  if(filtered.length === 0){
+    root.innerHTML = '<div class="empty"><h3>No archived tasks</h3><p>Completed tasks auto-archive after 7 days. Deleted tasks also appear here.</p></div>'; return;
+  }
+  root.innerHTML = `<div class="company-table"><table>
+    <thead><tr><th>Task</th><th>Status</th><th>Reason</th><th>Archived</th><th>Due date</th><th>Company</th><th></th></tr></thead>
+    <tbody>${filtered.map(a => {
+      const co = state.companies.find(c => c.id === a.companyId);
+      const reasonLabel = a.archiveReason === 'completed' ? '✅ Auto' : a.archiveReason === 'deleted' ? '🗑️ Deleted' : a.archiveReason === 'manual' ? '📦 Manual' : '—';
+      return `<tr>
+        <td><div class="company-name-cell">${esc(a.name)}</div>${a.category ? '<div class="company-industry">' + esc(a.category) + '</div>' : ''}</td>
+        <td><span class="status-pill status-${a.status === 'Done' ? 'Won' : 'Prospect'}">${esc(a.status)}</span></td>
+        <td style="font-size:12px">${reasonLabel}</td>
+        <td style="font-size:12px">${a.archivedAt ? formatDate(a.archivedAt.slice(0,10)) : '—'}</td>
+        <td style="font-size:12px">${a.date ? formatDate(a.date) : '—'}</td>
+        <td style="font-size:12px">${co ? esc(co.name) : '—'}</td>
+        <td><button class="btn btn-sm" onclick="handleRestore('${a.id}')">↩ Restore</button></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+// ========== TABS ==========
 function switchTab(name){
   state.currentTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -731,21 +830,19 @@ function switchTab(name){
   document.getElementById('tab-'+name).style.display = 'block';
   if(name==='dashboard') renderDashboard();
   else if(name==='companies') renderCompanies();
+  else if(name==='archive') renderArchive();
   else renderTaskView();
 }
 
 function refreshAll(){
-  populateFilterOptions();
-  renderTaskView();
-  renderCompanies();
-  renderDashboard();
-  refreshOverdueAlert();
-  refreshTaskCount();
+  populateFilterOptions(); renderTaskView(); renderCompanies(); renderDashboard();
+  refreshOverdueAlert(); refreshTaskCount();
   document.getElementById('countCompanies').textContent = state.companies.length;
+  document.getElementById('countArchive').textContent = state.archived.length;
+  if(state.currentTab === 'archive') renderArchive();
   const overdueCount = getOverdueTasks().length;
   if(overdueCount >= 3 && !sessionStorage.getItem('maple_overdue_shown')){
-    sessionStorage.setItem('maple_overdue_shown', '1');
-    setTimeout(openOverdueModal, 800);
+    sessionStorage.setItem('maple_overdue_shown', '1'); setTimeout(openOverdueModal, 800);
   }
 }
 
@@ -774,12 +871,10 @@ function populateFilterOptions(){
 function categoryClass(cat){
   if(!cat) return 'Other';
   const c = cat.toLowerCase();
-  if(c.includes('sales')) return 'Sales';
-  if(c.includes('marketing') || c.includes('linkedin') || c.includes('website') || c.includes('content')) return 'Marketing';
+  if(c.includes('sales')) return 'Sales'; if(c.includes('marketing') || c.includes('linkedin') || c.includes('website') || c.includes('content')) return 'Marketing';
   if(c.includes('admin') || c.includes('domain') || c.includes('billing') || c.includes('gst') || c.includes('email')) return 'Admin';
   if(c.includes('pr application') || c.includes('express entry') || c.includes('immigration')) return 'PR';
-  if(c.includes('personal')) return 'Personal';
-  if(c.includes('learn') || c.includes('study') || c.includes('research') || c.includes('course') || c.includes('pmp')) return 'Learning';
+  if(c.includes('personal')) return 'Personal'; if(c.includes('learn') || c.includes('study') || c.includes('research') || c.includes('course') || c.includes('pmp')) return 'Learning';
   return 'Other';
 }
 
@@ -788,11 +883,9 @@ function setTaskScope(scope){
   document.querySelectorAll('#scopeToggle button').forEach(b => { b.classList.toggle('active', b.dataset.scope === scope); });
   const compFilter = document.getElementById('filterCompany');
   if(compFilter) compFilter.style.display = (scope === 'personal') ? 'none' : '';
-  renderTaskView();
-  refreshTaskCount();
+  renderTaskView(); refreshTaskCount();
 }
 
-// ========== TASK VIEW TOGGLE (Kanban ↔ Calendar) ==========
 function setTaskView(view){
   state.taskView = view;
   document.querySelectorAll('#taskViewToggle button').forEach(b => { b.classList.toggle('active', b.dataset.view === view); });
@@ -801,12 +894,8 @@ function setTaskView(view){
   renderTaskView();
 }
 
-function renderTaskView(){
-  if(state.taskView === 'calendar') renderCalendar();
-  else renderKanban();
-}
+function renderTaskView(){ if(state.taskView === 'calendar') renderCalendar(); else renderKanban(); }
 
-// Shared filter logic
 function getFilteredTasks(){
   const search = document.getElementById('taskSearch').value.toLowerCase();
   const cat = document.getElementById('filterCategory').value;
@@ -823,23 +912,11 @@ function getFilteredTasks(){
   });
 }
 
-// ========== CALENDAR VIEW ==========
 let calCurrentWeekStart = getMonday(new Date());
-
-function getMonday(d){
-  const dt = new Date(d); dt.setHours(0,0,0,0);
-  const day = dt.getDay();
-  const diff = day === 0 ? -6 : 1 - day; // Monday=1
-  dt.setDate(dt.getDate() + diff);
-  return dt;
-}
-
+function getMonday(d){ const dt = new Date(d); dt.setHours(0,0,0,0); const day = dt.getDay(); const diff = day === 0 ? -6 : 1 - day; dt.setDate(dt.getDate() + diff); return dt; }
 function calWeekOffset(dir){
   if(dir === 0) calCurrentWeekStart = getMonday(new Date());
-  else {
-    calCurrentWeekStart = new Date(calCurrentWeekStart);
-    calCurrentWeekStart.setDate(calCurrentWeekStart.getDate() + dir * 7);
-  }
+  else { calCurrentWeekStart = new Date(calCurrentWeekStart); calCurrentWeekStart.setDate(calCurrentWeekStart.getDate() + dir * 7); }
   renderCalendar();
 }
 
@@ -847,68 +924,37 @@ function renderCalendar(){
   const filtered = getFilteredTasks();
   const today = new Date(); today.setHours(0,0,0,0);
   const weekStart = new Date(calCurrentWeekStart);
-
-  // Week label
   const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 6);
   const fmt = (d) => d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
   document.getElementById('calWeekLabel').textContent = fmt(weekStart) + ' — ' + fmt(weekEnd);
-
   const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const grid = document.getElementById('calGrid');
   let html = '';
-
   for(let i = 0; i < 7; i++){
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
+    const d = new Date(weekStart); d.setDate(d.getDate() + i);
     const dateStr = d.toISOString().slice(0,10);
     const isToday = d.getTime() === today.getTime();
     const isPast = d < today;
     const dayTasks = filtered.filter(t => t.date === dateStr);
-
     html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="openTaskModalForDate('${dateStr}', event)">
-      <div class="cal-day-header">
-        <span>${days[i]}</span>
-        <span class="cal-day-num">${d.getDate()}</span>
-      </div>
-      <div class="cal-day-tasks">
-        ${dayTasks.map(t => {
-          const cc = categoryClass(t.category);
-          const isDone = t.status === 'Done';
-          return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">
-            ${esc(t.name)}
-          </div>`;
-        }).join('') || ''}
-      </div>
-    </div>`;
+      <div class="cal-day-header"><span>${days[i]}</span><span class="cal-day-num">${d.getDate()}</span></div>
+      <div class="cal-day-tasks">${dayTasks.map(t => {
+        const cc = categoryClass(t.category); const isDone = t.status === 'Done';
+        return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">${esc(t.name)}</div>`;
+      }).join('') || ''}</div></div>`;
   }
   grid.innerHTML = html;
-
-  // Show unscheduled tasks below
   const noDate = filtered.filter(t => !t.date && t.status !== 'Done');
-  let unschedHtml = '';
-  if(noDate.length > 0){
-    unschedHtml = `<div class="cal-unscheduled">
-      <div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div>
-      <div class="cal-day-tasks">
-        ${noDate.map(t => {
-          const cc = categoryClass(t.category);
-          return `<div class="cal-task cal-task-cat-${cc}" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }
-  // Insert/update unscheduled section
   let unsched = document.getElementById('calUnscheduled');
-  if(!unsched){
-    unsched = document.createElement('div');
-    unsched.id = 'calUnscheduled';
-    document.getElementById('calendarView').appendChild(unsched);
-  }
-  unsched.innerHTML = unschedHtml;
+  if(!unsched){ unsched = document.createElement('div'); unsched.id = 'calUnscheduled'; document.getElementById('calendarView').appendChild(unsched); }
+  unsched.innerHTML = noDate.length > 0 ? `<div class="cal-unscheduled"><div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div><div class="cal-day-tasks">${noDate.map(t => {
+    const cc = categoryClass(t.category);
+    return `<div class="cal-task cal-task-cat-${cc}" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
+  }).join('')}</div></div>` : '';
 }
 
 function openTaskModalForDate(dateStr, event){
-  if(event && event.target.closest('.cal-task')) return; // clicked a task, not empty space
+  if(event && event.target.closest('.cal-task')) return;
   openTaskModal(null, 'Not started');
   setTimeout(() => { document.getElementById('tDate').value = dateStr; }, 60);
 }
@@ -919,33 +965,25 @@ function renderKanban(){
   const filtered = getFilteredTasks();
   root.innerHTML = statuses.map(s => {
     const tasks = filtered.filter(t => (t.status||'Not started') === s);
-    return `
-      <div class="column" data-status="${s}" ondragover="event.preventDefault()" ondrop="onDrop(event,'${s}')">
-        <div class="column-header">
-          <div class="column-title"><span class="swatch"></span>${s}<span class="column-count">${tasks.length}</span></div>
-          <button class="column-add" onclick="openTaskModal(null,'${s}')">+ Add</button>
-        </div>
-        <div class="cards">
-          ${tasks.map(t => renderCard(t)).join('') || '<div style="font-size:12px;color:var(--ink-mute);text-align:center;padding:20px">No tasks</div>'}
-        </div>
-      </div>`;
+    return `<div class="column" data-status="${s}" ondragover="event.preventDefault()" ondrop="onDrop(event,'${s}')">
+      <div class="column-header"><div class="column-title"><span class="swatch"></span>${s}<span class="column-count">${tasks.length}</span></div>
+        <button class="column-add" onclick="openTaskModal(null,'${s}')">+ Add</button></div>
+      <div class="cards">${tasks.map(t => renderCard(t)).join('') || '<div style="font-size:12px;color:var(--ink-mute);text-align:center;padding:20px">No tasks</div>'}</div></div>`;
   }).join('');
 }
 
 function renderCard(t){
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';
-  return `
-    <div class="card" draggable="true" ondragstart="onDragStart(event,'${t.id}')" onclick="openTaskModal('${t.id}')">
-      <div class="card-title">${esc(t.name)}</div>
-      <div class="card-meta">
-        ${t.priority?`<span class="pill pill-priority-${t.priority}">${t.priority}</span>`:''}
-        ${t.category?`<span class="pill pill-cat pill-cat-${categoryClass(t.category)}">${esc(t.category)}</span>`:''}
-        ${company?`<span class="pill pill-company">🏢 ${esc(company.name)}</span>`:''}
-        ${t.date?`<span class="card-date ${overdue?'overdue':''}">${formatDate(t.date)}</span>`:''}
-        ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}
-      </div>
-    </div>`;
+  return `<div class="card" draggable="true" ondragstart="onDragStart(event,'${t.id}')" onclick="openTaskModal('${t.id}')">
+    <div class="card-title">${esc(t.name)}</div>
+    <div class="card-meta">
+      ${t.priority?`<span class="pill pill-priority-${t.priority}">${t.priority}</span>`:''}
+      ${t.category?`<span class="pill pill-cat pill-cat-${categoryClass(t.category)}">${esc(t.category)}</span>`:''}
+      ${company?`<span class="pill pill-company">🏢 ${esc(company.name)}</span>`:''}
+      ${t.date?`<span class="card-date ${overdue?'overdue':''}">${formatDate(t.date)}</span>`:''}
+      ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}
+    </div></div>`;
 }
 
 function onDragStart(e, id){ e.dataTransfer.setData('text/plain', id); e.target.classList.add('dragging'); }
@@ -980,6 +1018,7 @@ function openTaskModal(id, defaultStatus){
   document.getElementById('tNotes').value = t.notes||'';
   document.getElementById('tLinks').value = t.links||'';
   document.getElementById('tDelete').style.display = id ? 'inline-flex' : 'none';
+  document.getElementById('tArchive').style.display = id ? 'inline-flex' : 'none';
   if(!id) state.editingTask = t;
   document.getElementById('taskModal').classList.add('open');
   setTimeout(()=>document.getElementById('tName').focus(), 50);
@@ -1011,107 +1050,71 @@ async function saveTask(){
 
 async function deleteTask(){
   const t = state.editingTask;
-  if(!t || !confirm('Delete this task?')) return;
-  state.tasks = state.tasks.filter(x=>x.id!==t.id);
-  refreshAll(); closeTaskModal();
-  try { await deleteRowById(SHEET_TABS.tasks, t.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
+  if(!t || !confirm('Archive this task? It will be moved to the Archive tab for reference.')) return;
+  closeTaskModal();
+  try { await archiveTask(t.id, 'deleted'); refreshAll(); cacheLocal(); toast('Archived'); }
+  catch(e){ toast('Archive failed: ' + e.message, true); }
 }
 
 // ========== OVERDUE ==========
 function getOverdueTasks(){
   const today = new Date(new Date().toDateString());
-  return state.tasks.filter(t => {
-    if(!t.date) return false;
-    if(t.status === 'Done') return false;
-    return new Date(t.date) < today;
-  });
+  return state.tasks.filter(t => { if(!t.date) return false; if(t.status === 'Done') return false; return new Date(t.date) < today; });
 }
-
 function refreshOverdueAlert(){
   const overdue = getOverdueTasks();
   const banner = document.getElementById('overdueBanner');
   const bannerText = document.getElementById('overdueBannerText');
   const dot = document.getElementById('taskAlertDot');
   if(!banner || !dot) return;
-  if(overdue.length > 0){
-    banner.classList.add('show');
-    bannerText.textContent = `${overdue.length} task${overdue.length>1?'s':''} overdue`;
-    dot.classList.add('show');
-  } else {
-    banner.classList.remove('show');
-    dot.classList.remove('show');
-  }
+  if(overdue.length > 0){ banner.classList.add('show'); bannerText.textContent = `${overdue.length} task${overdue.length>1?'s':''} overdue`; dot.classList.add('show'); }
+  else { banner.classList.remove('show'); dot.classList.remove('show'); }
 }
 
 function openOverdueModal(){
   const overdue = getOverdueTasks().sort((a,b) => new Date(a.date) - new Date(b.date));
   const list = document.getElementById('overdueList');
-  if(overdue.length === 0){
-    list.innerHTML = '<div class="empty-mini">No overdue tasks. 🎉</div>';
-  } else {
+  if(overdue.length === 0){ list.innerHTML = '<div class="empty-mini">No overdue tasks. 🎉</div>'; }
+  else {
     list.innerHTML = overdue.map(t => {
       const company = state.companies.find(c => c.id === t.companyId);
       const daysLate = Math.floor((new Date(new Date().toDateString()) - new Date(t.date)) / 86400000);
-      return `
-        <div class="overdue-row" data-id="${t.id}">
-          <div class="overdue-row-head">
-            <div>
-              <div class="overdue-row-name">${esc(t.name)}</div>
-              <div class="overdue-row-meta">
-                ${daysLate} day${daysLate!==1?'s':''} late · was ${formatDate(t.date)}
-                ${company ? '· 🏢 ' + esc(company.name) : ''}
-                ${t.priority ? '· ' + esc(t.priority) : ''}
-              </div>
-            </div>
-          </div>
-          <div class="overdue-actions">
-            <button onclick="rescheduleOverdue('${t.id}', 0)">Today</button>
-            <button onclick="rescheduleOverdue('${t.id}', 1)">Tomorrow</button>
-            <button onclick="rescheduleOverdue('${t.id}', 7)">+1 week</button>
-            <input type="date" class="custom-date" onchange="rescheduleOverdueCustom('${t.id}', this.value)">
-            <button class="done-btn" onclick="markOverdueDone('${t.id}')">✓ Done</button>
-            <button onclick="closeOverdueModal(); openTaskModal('${t.id}')">Edit…</button>
-          </div>
-        </div>`;
+      return `<div class="overdue-row" data-id="${t.id}">
+        <div class="overdue-row-head"><div>
+          <div class="overdue-row-name">${esc(t.name)}</div>
+          <div class="overdue-row-meta">${daysLate} day${daysLate!==1?'s':''} late · was ${formatDate(t.date)}${company ? '· 🏢 ' + esc(company.name) : ''}${t.priority ? '· ' + esc(t.priority) : ''}</div>
+        </div></div>
+        <div class="overdue-actions">
+          <button onclick="rescheduleOverdue('${t.id}', 0)">Today</button>
+          <button onclick="rescheduleOverdue('${t.id}', 1)">Tomorrow</button>
+          <button onclick="rescheduleOverdue('${t.id}', 7)">+1 week</button>
+          <input type="date" class="custom-date" onchange="rescheduleOverdueCustom('${t.id}', this.value)">
+          <button class="done-btn" onclick="markOverdueDone('${t.id}')">✓ Done</button>
+          <button onclick="closeOverdueModal(); openTaskModal('${t.id}')">Edit…</button>
+        </div></div>`;
     }).join('');
   }
   document.getElementById('overdueModal').classList.add('open');
 }
-
 function closeOverdueModal(){ document.getElementById('overdueModal').classList.remove('open'); }
 
 async function rescheduleOverdue(id, daysFromToday){
-  const t = state.tasks.find(x => x.id === id);
-  if(!t) return;
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromToday);
-  t.date = d.toISOString().slice(0,10);
-  t.updatedAt = nowIso();
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  const d = new Date(); d.setDate(d.getDate() + daysFromToday);
+  t.date = d.toISOString().slice(0,10); t.updatedAt = nowIso();
   await persistTaskAndRefresh(t, daysFromToday === 0 ? 'Moved to today' : daysFromToday === 1 ? 'Moved to tomorrow' : `Moved +${daysFromToday} days`);
 }
-
 async function rescheduleOverdueCustom(id, dateStr){
-  if(!dateStr) return;
-  const t = state.tasks.find(x => x.id === id);
-  if(!t) return;
-  t.date = dateStr; t.updatedAt = nowIso();
-  await persistTaskAndRefresh(t, 'Rescheduled to ' + formatDate(dateStr));
+  if(!dateStr) return; const t = state.tasks.find(x => x.id === id); if(!t) return;
+  t.date = dateStr; t.updatedAt = nowIso(); await persistTaskAndRefresh(t, 'Rescheduled to ' + formatDate(dateStr));
 }
-
 async function markOverdueDone(id){
-  const t = state.tasks.find(x => x.id === id);
-  if(!t) return;
-  t.status = 'Done'; t.updatedAt = nowIso();
-  await persistTaskAndRefresh(t, 'Marked done');
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  t.status = 'Done'; t.updatedAt = nowIso(); await persistTaskAndRefresh(t, 'Marked done');
 }
-
 async function persistTaskAndRefresh(t, msg){
-  try {
-    await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
-    toast(msg);
-    renderTaskView(); refreshOverdueAlert(); refreshTaskCount(); cacheLocal();
-    const stillOpen = document.getElementById('overdueModal').classList.contains('open');
-    if(stillOpen) openOverdueModal();
+  try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast(msg); renderTaskView(); refreshOverdueAlert(); refreshTaskCount(); cacheLocal();
+    if(document.getElementById('overdueModal').classList.contains('open')) openOverdueModal();
   } catch(err){ toast('Save failed: ' + err.message, true); }
 }
 
@@ -1120,154 +1123,87 @@ const MAPLE_ROOT_FOLDER_NAME = 'Maple MPSS';
 let mapleRootFolderId = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 
 async function driveRequest(url, opts = {}){
-  const r = await fetch(url, {
-    ...opts,
-    headers: { Authorization: 'Bearer ' + accessToken, ...(opts.headers || {}) }
-  });
+  const r = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + accessToken, ...(opts.headers || {}) } });
   if(!r.ok) throw new Error('Drive API ' + r.status);
   return r.json();
 }
-
 async function findOrCreateFolder(name, parentId){
-  // Search for existing folder
   let q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   if(parentId) q += ` and '${parentId}' in parents`;
-  const search = await driveRequest(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`
-  );
+  const search = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`);
   if(search.files && search.files.length > 0) return search.files[0].id;
-
-  // Create folder
   const meta = { name, mimeType: 'application/vnd.google-apps.folder' };
   if(parentId) meta.parents = [parentId];
-  const created = await driveRequest('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(meta)
-  });
+  const created = await driveRequest('https://www.googleapis.com/drive/v3/files', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) });
   return created.id;
 }
-
-async function getMapleRootFolder(){
-  return mapleRootFolderId;
-}
-
+async function getMapleRootFolder(){ return mapleRootFolderId; }
 async function getCompanyFolder(companyName){
   const rootId = await getMapleRootFolder();
   return await findOrCreateFolder(companyName, rootId);
 }
-
 async function uploadFileToDrive(file, folderId){
   const metadata = { name: file.name, parents: [folderId] };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', file);
-  const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,thumbnailLink,size,createdTime', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + accessToken },
-    body: form
-  });
+  const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,thumbnailLink,size,createdTime', { method: 'POST', headers: { Authorization: 'Bearer ' + accessToken }, body: form });
   if(!r.ok) throw new Error('Upload failed: ' + r.status);
   return await r.json();
 }
-
 async function listFilesInFolder(folderId){
   const q = `'${folderId}' in parents and trashed=false`;
-  const result = await driveRequest(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,webViewLink,thumbnailLink,size,createdTime)&orderBy=createdTime desc&pageSize=50`
-  );
+  const result = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,webViewLink,thumbnailLink,size,createdTime)&orderBy=createdTime desc&pageSize=50`);
   return result.files || [];
 }
-
 function fileIcon(mimeType){
-  if(!mimeType) return '📄';
-  if(mimeType.startsWith('image/')) return '🖼️';
-  if(mimeType.includes('pdf')) return '📕';
-  if(mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊';
-  if(mimeType.includes('document') || mimeType.includes('word')) return '📝';
+  if(!mimeType) return '📄'; if(mimeType.startsWith('image/')) return '🖼️'; if(mimeType.includes('pdf')) return '📕';
+  if(mimeType.includes('spreadsheet') || mimeType.includes('excel')) return '📊'; if(mimeType.includes('document') || mimeType.includes('word')) return '📝';
   if(mimeType.includes('presentation') || mimeType.includes('powerpoint')) return '📽️';
   if(mimeType.includes('dwg') || mimeType.includes('dxf') || mimeType.includes('cad') || mimeType.includes('acad')) return '📐';
-  if(mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) return '📦';
-  return '📄';
+  if(mimeType.includes('zip') || mimeType.includes('rar') || mimeType.includes('tar')) return '📦'; return '📄';
 }
-
-function formatFileSize(bytes){
-  if(!bytes) return '';
-  const b = Number(bytes);
-  if(b < 1024) return b + ' B';
-  if(b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  return (b/1048576).toFixed(1) + ' MB';
-}
+function formatFileSize(bytes){ if(!bytes) return ''; const b = Number(bytes); if(b < 1024) return b + ' B'; if(b < 1048576) return (b/1024).toFixed(1) + ' KB'; return (b/1048576).toFixed(1) + ' MB'; }
 
 async function renderCompanyFiles(companyName){
-  const grid = document.getElementById('companyFiles');
-  if(!grid) return;
+  const grid = document.getElementById('companyFiles'); if(!grid) return;
   if(!accessToken){ grid.innerHTML = '<div class="empty-mini">Sign in to see files</div>'; return; }
-
   grid.innerHTML = '<div class="empty-mini" style="font-style:italic">Loading files...</div>';
   try {
     const folderId = await getCompanyFolder(companyName);
-    // Store folder ID on the zone for uploads
     document.getElementById('fileDropZone').dataset.folderId = folderId;
     const files = await listFilesInFolder(folderId);
-    if(files.length === 0){
-      grid.innerHTML = '<div class="empty-mini">No files yet — upload quotes, drawings, or photos above</div>';
-      return;
-    }
+    if(files.length === 0){ grid.innerHTML = '<div class="empty-mini">No files yet — upload quotes, drawings, or photos above</div>'; return; }
     grid.innerHTML = files.map(f => {
       const isImage = f.mimeType && f.mimeType.startsWith('image/');
       const thumb = isImage && f.thumbnailLink ? `<img class="file-card-thumb" src="${f.thumbnailLink}" alt="">` : `<div class="file-card-icon">${fileIcon(f.mimeType)}</div>`;
-      return `<a class="file-card" href="${f.webViewLink}" target="_blank" rel="noopener" title="Open in Google Drive">
-        ${thumb}
-        <div class="file-card-name">${esc(f.name)}</div>
-        <div class="file-card-meta">${formatFileSize(f.size)}</div>
-      </a>`;
+      return `<a class="file-card" href="${f.webViewLink}" target="_blank" rel="noopener" title="Open in Google Drive">${thumb}<div class="file-card-name">${esc(f.name)}</div><div class="file-card-meta">${formatFileSize(f.size)}</div></a>`;
     }).join('');
-  } catch(e){
-    console.error('Drive list error', e);
-    grid.innerHTML = '<div class="empty-mini">Could not load files</div>';
-  }
+  } catch(e){ console.error('Drive list error', e); grid.innerHTML = '<div class="empty-mini">Could not load files</div>'; }
 }
 
 async function handleFileUpload(fileList){
-  const files = Array.from(fileList || []);
-  if(files.length === 0) return;
-  const company = state.editingCompany;
-  if(!company){ toast('No company selected', true); return; }
+  const files = Array.from(fileList || []); if(files.length === 0) return;
+  const company = state.editingCompany; if(!company){ toast('No company selected', true); return; }
   if(!accessToken){ toast('Sign in first', true); return; }
-
-  const progress = document.getElementById('fileUploadProgress');
-  progress.classList.add('show');
-
+  const progress = document.getElementById('fileUploadProgress'); progress.classList.add('show');
   try {
     const folderId = document.getElementById('fileDropZone').dataset.folderId || await getCompanyFolder(company.name);
-    for(let i = 0; i < files.length; i++){
-      progress.textContent = `Uploading ${i+1}/${files.length}: ${files[i].name}...`;
-      await uploadFileToDrive(files[i], folderId);
-    }
+    for(let i = 0; i < files.length; i++){ progress.textContent = `Uploading ${i+1}/${files.length}: ${files[i].name}...`; await uploadFileToDrive(files[i], folderId); }
     toast(`${files.length} file${files.length>1?'s':''} uploaded`);
     await renderCompanyFiles(company.name);
-  } catch(e){
-    console.error('Upload error', e);
-    toast('Upload failed: ' + e.message, true);
-  } finally {
-    progress.classList.remove('show');
-    document.getElementById('fileUploadInput').value = '';
-  }
+  } catch(e){ console.error('Upload error', e); toast('Upload failed: ' + e.message, true); }
+  finally { progress.classList.remove('show'); document.getElementById('fileUploadInput').value = ''; }
 }
+function handleFileDrop(event){ const files = event.dataTransfer?.files; if(files && files.length > 0) handleFileUpload(files); }
 
-function handleFileDrop(event){
-  const files = event.dataTransfer?.files;
-  if(files && files.length > 0) handleFileUpload(files);
-}
-
+// ========== COMPANIES ==========
 function setCompanyView(v){
   state.view = v;
   document.getElementById('viewTable').classList.toggle('active', v==='table');
   document.getElementById('viewCards').classList.toggle('active', v==='cards');
   renderCompanies();
 }
-
 function renderCompanies(){
   const root = document.getElementById('companiesContainer');
   const search = (document.getElementById('companySearch')?.value||'').toLowerCase();
@@ -1275,71 +1211,45 @@ function renderCompanies(){
   const owner = document.getElementById('filterCompanyOwner')?.value || '';
   const filtered = state.companies.filter(c=>{
     if(search && !((c.name||'')+(c.industry||'')+(c.contact||'')).toLowerCase().includes(search)) return false;
-    if(status && c.status !== status) return false;
-    if(owner && c.owner !== owner) return false;
-    return true;
+    if(status && c.status !== status) return false; if(owner && c.owner !== owner) return false; return true;
   });
-  if(filtered.length === 0){
-    root.innerHTML = `<div class="empty"><h3>No companies yet</h3><p>Click "+ Add company" to start building your CRM.</p></div>`;
-    return;
-  }
+  if(filtered.length === 0){ root.innerHTML = `<div class="empty"><h3>No companies yet</h3><p>Click "+ Add company" to start building your CRM.</p></div>`; return; }
   if(state.view === 'cards'){
     root.innerHTML = `<div class="company-grid">${filtered.map(c=>{
       const lastVisit = state.visits.filter(v=>v.companyId===c.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
       const taskCount = state.tasks.filter(t=>t.companyId===c.id).length;
-      return `
-        <div class="company-card" onclick="openCompanyModal('${c.id}')">
-          <div class="company-card-name">${esc(c.name)}</div>
-          <div class="company-card-industry">${esc(c.industry||'—')}${c.size?' · '+esc(c.size):''}</div>
-          <div><span class="status-pill status-${c.status||'Prospect'}">${c.status||'Prospect'}</span></div>
-          <div class="company-card-row"><span>Last interaction</span><span>${c.lastInteraction?formatDate(c.lastInteraction):'—'}</span></div>
-          <div class="company-card-row"><span>Pipeline</span><span>${c.value?'$'+Number(c.value).toLocaleString():'—'}</span></div>
-          <div class="company-card-row"><span>${taskCount} task${taskCount!==1?'s':''}</span><span>${lastVisit?lastVisit.type:''}</span></div>
-        </div>`;
+      return `<div class="company-card" onclick="openCompanyModal('${c.id}')">
+        <div class="company-card-name">${esc(c.name)}</div>
+        <div class="company-card-industry">${esc(c.industry||'—')}${c.size?' · '+esc(c.size):''}</div>
+        <div><span class="status-pill status-${c.status||'Prospect'}">${c.status||'Prospect'}</span></div>
+        <div class="company-card-row"><span>Last interaction</span><span>${c.lastInteraction?formatDate(c.lastInteraction):'—'}</span></div>
+        <div class="company-card-row"><span>Pipeline</span><span>${c.value?'$'+Number(c.value).toLocaleString():'—'}</span></div>
+        <div class="company-card-row"><span>${taskCount} task${taskCount!==1?'s':''}</span><span>${lastVisit?lastVisit.type:''}</span></div></div>`;
     }).join('')}</div>`;
   } else {
-    root.innerHTML = `
-      <div class="company-table">
-        <table>
-          <thead><tr>
-            <th>Company</th><th>Status</th><th>Contact</th><th>Phone</th>
-            <th>Pipeline</th><th>Last interaction</th><th>Owner</th><th>Tasks</th>
-          </tr></thead>
-          <tbody>
-            ${filtered.map(c=>{
-              const taskCount = state.tasks.filter(t=>t.companyId===c.id).length;
-              return `<tr onclick="openCompanyModal('${c.id}')">
-                <td><div class="company-name-cell">${esc(c.name)}</div><div class="company-industry">${esc(c.industry||'')}</div></td>
-                <td><span class="status-pill status-${c.status||'Prospect'}">${c.status||'Prospect'}</span></td>
-                <td>${esc(c.contact||'—')}</td>
-                <td>${esc(c.phone||'—')}</td>
-                <td>${c.value?'$'+Number(c.value).toLocaleString():'—'}</td>
-                <td>${c.lastInteraction?formatDate(c.lastInteraction):'—'}</td>
-                <td>${esc(c.owner||'—')}</td>
-                <td>${taskCount}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    root.innerHTML = `<div class="company-table"><table>
+      <thead><tr><th>Company</th><th>Status</th><th>Contact</th><th>Phone</th><th>Pipeline</th><th>Last interaction</th><th>Owner</th><th>Tasks</th></tr></thead>
+      <tbody>${filtered.map(c=>{
+        const taskCount = state.tasks.filter(t=>t.companyId===c.id).length;
+        return `<tr onclick="openCompanyModal('${c.id}')">
+          <td><div class="company-name-cell">${esc(c.name)}</div><div class="company-industry">${esc(c.industry||'')}</div></td>
+          <td><span class="status-pill status-${c.status||'Prospect'}">${c.status||'Prospect'}</span></td>
+          <td>${esc(c.contact||'—')}</td><td>${esc(c.phone||'—')}</td>
+          <td>${c.value?'$'+Number(c.value).toLocaleString():'—'}</td>
+          <td>${c.lastInteraction?formatDate(c.lastInteraction):'—'}</td>
+          <td>${esc(c.owner||'—')}</td><td>${taskCount}</td></tr>`;
+      }).join('')}</tbody></table></div>`;
   }
 }
 
 function openCompanyModal(id){
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
-  const c = state.editingCompany || {
-    id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'',
-    website:'', linkedin:'', status:'Prospect', value:'', owner:'Son', lastInteraction:'',
-    notes:'', createdAt: nowIso()
-  };
+  const c = state.editingCompany || { id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'', website:'', linkedin:'', status:'Prospect', value:'', owner:'Son', lastInteraction:'', notes:'', createdAt: nowIso() };
   document.getElementById('companyModalTitle').textContent = id ? 'Edit company' : 'New company';
-  ['Name','Industry','Size','Makes','Address','Contact','Phone','Email','Website','LinkedIn','Status','Value','Owner','Last','Notes']
-    .forEach(k=>{
-      const map = {Last:'lastInteraction'};
-      const key = map[k] || k.charAt(0).toLowerCase()+k.slice(1);
-      const el = document.getElementById('c'+k);
-      if(el) el.value = c[key]||'';
-    });
+  ['Name','Industry','Size','Makes','Address','Contact','Phone','Email','Website','LinkedIn','Status','Value','Owner','Last','Notes'].forEach(k=>{
+    const map = {Last:'lastInteraction'}; const key = map[k] || k.charAt(0).toLowerCase()+k.slice(1);
+    const el = document.getElementById('c'+k); if(el) el.value = c[key]||'';
+  });
   document.getElementById('cDelete').style.display = id ? 'inline-flex' : 'none';
   document.getElementById('visitSection').style.display = id ? 'block' : 'none';
   if(id) renderVisitsForCompany(id);
@@ -1348,28 +1258,19 @@ function openCompanyModal(id){
   document.getElementById('companyModal').classList.add('open');
   setTimeout(()=>document.getElementById('cName').focus(), 50);
 }
-
 function closeCompanyModal(){ document.getElementById('companyModal').classList.remove('open'); state.editingCompany = null; }
 
 async function saveCompany(){
-  const c = state.editingCompany;
-  if(!c){ closeCompanyModal(); return; }
+  const c = state.editingCompany; if(!c){ closeCompanyModal(); return; }
   c.name = document.getElementById('cName').value.trim();
   if(!c.name){ toast('Company name required', true); return; }
-  c.industry = document.getElementById('cIndustry').value;
-  c.size = document.getElementById('cSize').value;
-  c.makes = document.getElementById('cMakes').value;
-  c.address = document.getElementById('cAddress').value;
-  c.contact = document.getElementById('cContact').value;
-  c.phone = document.getElementById('cPhone').value;
-  c.email = document.getElementById('cEmail').value;
-  c.website = document.getElementById('cWebsite').value;
-  c.linkedin = document.getElementById('cLinkedIn').value;
-  c.status = document.getElementById('cStatus').value;
-  c.value = document.getElementById('cValue').value;
-  c.owner = document.getElementById('cOwner').value;
-  c.lastInteraction = document.getElementById('cLast').value;
-  c.notes = document.getElementById('cNotes').value;
+  c.industry = document.getElementById('cIndustry').value; c.size = document.getElementById('cSize').value;
+  c.makes = document.getElementById('cMakes').value; c.address = document.getElementById('cAddress').value;
+  c.contact = document.getElementById('cContact').value; c.phone = document.getElementById('cPhone').value;
+  c.email = document.getElementById('cEmail').value; c.website = document.getElementById('cWebsite').value;
+  c.linkedin = document.getElementById('cLinkedIn').value; c.status = document.getElementById('cStatus').value;
+  c.value = document.getElementById('cValue').value; c.owner = document.getElementById('cOwner').value;
+  c.lastInteraction = document.getElementById('cLast').value; c.notes = document.getElementById('cNotes').value;
   c.updatedAt = nowIso();
   const idx = state.companies.findIndex(x=>x.id===c.id);
   if(idx >= 0) state.companies[idx] = c; else state.companies.push(c);
@@ -1389,92 +1290,59 @@ async function deleteCompany(){
 function renderVisitsForCompany(companyId){
   const visits = state.visits.filter(v=>v.companyId===companyId).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   const list = document.getElementById('visitList');
-  list.innerHTML = visits.length ? visits.map(v=>`
-    <div class="visit-item" onclick="openVisitModal('${v.id}')">
-      <div class="visit-head">
-        <span class="visit-date">${formatDate(v.date)} · ${esc(v.outcome||'')}</span>
-        <span class="visit-type">${esc(v.type||'')}</span>
-      </div>
-      ${v.notes?`<div class="visit-notes">${esc(v.notes)}</div>`:''}
-      ${v.nextStep?`<div class="visit-next">→ ${esc(v.nextStep)}</div>`:''}
-      <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">Logged by ${esc(v.loggedBy||'—')}</div>
-    </div>
-  `).join('') : '<div class="empty-mini">No visits logged yet</div>';
+  list.innerHTML = visits.length ? visits.map(v=>`<div class="visit-item" onclick="openVisitModal('${v.id}')">
+    <div class="visit-head"><span class="visit-date">${formatDate(v.date)} · ${esc(v.outcome||'')}</span><span class="visit-type">${esc(v.type||'')}</span></div>
+    ${v.notes?`<div class="visit-notes">${esc(v.notes)}</div>`:''}
+    ${v.nextStep?`<div class="visit-next">→ ${esc(v.nextStep)}</div>`:''}
+    <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">Logged by ${esc(v.loggedBy||'—')}</div></div>`).join('') : '<div class="empty-mini">No visits logged yet</div>';
   const tasks = state.tasks.filter(t=>t.companyId===companyId);
-  const linked = document.getElementById('linkedTasks');
-  linked.innerHTML = tasks.length ? tasks.map(t=>`
-    <div class="linked-task" onclick="closeCompanyModal();openTaskModal('${t.id}')">
-      <span class="status-pill status-${t.status==='Done'?'Won':'Prospect'}">${esc(t.status)}</span>
-      <span>${esc(t.name)}</span>
-      ${t.date?`<span style="margin-left:auto;font-size:11px;color:var(--ink-mute)">${formatDate(t.date)}</span>`:''}
-    </div>
-  `).join('') : '<div class="empty-mini">No linked tasks</div>';
+  document.getElementById('linkedTasks').innerHTML = tasks.length ? tasks.map(t=>`<div class="linked-task" onclick="closeCompanyModal();openTaskModal('${t.id}')">
+    <span class="status-pill status-${t.status==='Done'?'Won':'Prospect'}">${esc(t.status)}</span><span>${esc(t.name)}</span>
+    ${t.date?`<span style="margin-left:auto;font-size:11px;color:var(--ink-mute)">${formatDate(t.date)}</span>`:''}</div>`).join('') : '<div class="empty-mini">No linked tasks</div>';
 }
 
 function openVisitModal(id){
   state.editingVisit = id ? state.visits.find(v=>v.id===id) : null;
   const c = state.editingCompany;
-  const v = state.editingVisit || {
-    id: newId('VIS'), companyId: c?c.id:'', date: new Date().toISOString().slice(0,10),
-    type: 'In-person', outcome: 'Positive', notes:'', nextStep:'', loggedBy:'Son', createdAt: nowIso()
-  };
-  document.getElementById('vDate').value = v.date||'';
-  document.getElementById('vType').value = v.type||'In-person';
-  document.getElementById('vOutcome').value = v.outcome||'Positive';
-  document.getElementById('vNotes').value = v.notes||'';
-  document.getElementById('vNext').value = v.nextStep||'';
-  document.getElementById('vBy').value = v.loggedBy||'Son';
+  const v = state.editingVisit || { id: newId('VIS'), companyId: c?c.id:'', date: new Date().toISOString().slice(0,10), type: 'In-person', outcome: 'Positive', notes:'', nextStep:'', loggedBy:'Son', createdAt: nowIso() };
+  document.getElementById('vDate').value = v.date||''; document.getElementById('vType').value = v.type||'In-person';
+  document.getElementById('vOutcome').value = v.outcome||'Positive'; document.getElementById('vNotes').value = v.notes||'';
+  document.getElementById('vNext').value = v.nextStep||''; document.getElementById('vBy').value = v.loggedBy||'Son';
   document.getElementById('vDelete').style.display = id ? 'inline-flex' : 'none';
   if(!id) state.editingVisit = v;
   document.getElementById('visitModal').classList.add('open');
 }
-
-function closeVisitModal(){
-  document.getElementById('visitModal').classList.remove('open');
-  state.editingVisit = null;
-  if(state.editingCompany) renderVisitsForCompany(state.editingCompany.id);
-}
+function closeVisitModal(){ document.getElementById('visitModal').classList.remove('open'); state.editingVisit = null; if(state.editingCompany) renderVisitsForCompany(state.editingCompany.id); }
 
 async function saveVisit(){
-  const v = state.editingVisit;
-  if(!v){ closeVisitModal(); return; }
-  v.date = document.getElementById('vDate').value;
-  v.type = document.getElementById('vType').value;
-  v.outcome = document.getElementById('vOutcome').value;
-  v.notes = document.getElementById('vNotes').value;
-  v.nextStep = document.getElementById('vNext').value;
-  v.loggedBy = document.getElementById('vBy').value;
+  const v = state.editingVisit; if(!v){ closeVisitModal(); return; }
+  v.date = document.getElementById('vDate').value; v.type = document.getElementById('vType').value;
+  v.outcome = document.getElementById('vOutcome').value; v.notes = document.getElementById('vNotes').value;
+  v.nextStep = document.getElementById('vNext').value; v.loggedBy = document.getElementById('vBy').value;
   const idx = state.visits.findIndex(x=>x.id===v.id);
   if(idx >= 0) state.visits[idx] = v; else state.visits.push(v);
   if(state.editingCompany && v.date){
     state.editingCompany.lastInteraction = v.date;
     if(state.editingCompany.status === 'Prospect') state.editingCompany.status = 'Visited';
-    document.getElementById('cLast').value = v.date;
-    document.getElementById('cStatus').value = state.editingCompany.status;
+    document.getElementById('cLast').value = v.date; document.getElementById('cStatus').value = state.editingCompany.status;
   }
   closeVisitModal(); refreshAll();
-  try {
-    await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
+  try { await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
     if(state.editingCompany) await upsertRow(SHEET_TABS.companies, COMPANY_COLS, state.editingCompany);
     toast('Visit logged'); cacheLocal();
   } catch(e){ toast('Saved locally — sync failed', true); }
 }
 
 async function deleteVisit(){
-  const v = state.editingVisit;
-  if(!v || !confirm('Delete this visit?')) return;
+  const v = state.editingVisit; if(!v || !confirm('Delete this visit?')) return;
   state.visits = state.visits.filter(x=>x.id!==v.id);
   closeVisitModal(); refreshAll();
   try { await deleteRowById(SHEET_TABS.visits, v.id); toast('Deleted'); } catch(e){ toast('Delete failed remotely', true); }
 }
 
-function openTaskModalForCompany(){
-  if(!state.editingCompany) return;
-  state.taskForCompany = state.editingCompany.id;
-  closeCompanyModal();
-  openTaskModal();
-}
+function openTaskModalForCompany(){ if(!state.editingCompany) return; state.taskForCompany = state.editingCompany.id; closeCompanyModal(); openTaskModal(); }
 
+// ========== DASHBOARD ==========
 function renderDashboard(){
   const stats = computeStats();
   document.getElementById('statCards').innerHTML = `
@@ -1483,50 +1351,34 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Visits this week</div><div class="stat-value">${stats.visitsThisWeek}</div><div class="stat-sub">${stats.visitsLastWeek} last week</div></div>
     <div class="stat-card"><div class="stat-label">Tasks open</div><div class="stat-value">${stats.openTasks}</div><div class="stat-sub">${stats.overdueTasks} overdue</div></div>
     <div class="stat-card"><div class="stat-label">Response rate</div><div class="stat-value">${stats.responseRate}%</div><div class="stat-sub">visited → quoted+</div></div>
-    <div class="stat-card"><div class="stat-label">Win rate</div><div class="stat-value">${stats.winRate}%</div><div class="stat-sub">quoted → won</div></div>
-  `;
+    <div class="stat-card"><div class="stat-label">Win rate</div><div class="stat-value">${stats.winRate}%</div><div class="stat-sub">quoted → won</div></div>`;
   const statuses = ['Prospect','Visited','Quoted','Won','Lost'];
   const counts = statuses.map(s => state.companies.filter(c => (c.status||'Prospect') === s).length);
   const max = Math.max(...counts, 1);
-  document.getElementById('funnelChart').innerHTML = statuses.map((s, i) => `
-    <div class="funnel-row">
-      <div class="funnel-label">${s}</div>
-      <div class="funnel-bar"><div class="funnel-fill ${s}" style="width:${(counts[i]/max)*100}%">${counts[i]||''}</div></div>
-    </div>`).join('');
+  document.getElementById('funnelChart').innerHTML = statuses.map((s, i) => `<div class="funnel-row"><div class="funnel-label">${s}</div><div class="funnel-bar"><div class="funnel-fill ${s}" style="width:${(counts[i]/max)*100}%">${counts[i]||''}</div></div></div>`).join('');
   const recent = [...state.visits].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0, 8);
   document.getElementById('activityList').innerHTML = recent.length ? recent.map(v=>{
     const c = state.companies.find(x=>x.id===v.companyId);
-    return `<div class="activity-item">
-      <div class="activity-icon" style="background:var(--bg-card);border:1px solid var(--line)">${v.type==='Call'?'📞':v.type==='Email'?'✉️':v.type==='LinkedIn'?'💼':'🤝'}</div>
-      <div class="activity-body">
-        <div class="activity-title">${esc(c?c.name:'Unknown')} — ${esc(v.outcome||v.type)}</div>
-        <div class="activity-meta">${formatDate(v.date)} · by ${esc(v.loggedBy||'')}${v.nextStep?' · next: '+esc(v.nextStep):''}</div>
-      </div>
-    </div>`;
+    return `<div class="activity-item"><div class="activity-icon" style="background:var(--bg-card);border:1px solid var(--line)">${v.type==='Call'?'📞':v.type==='Email'?'✉️':v.type==='LinkedIn'?'💼':'🤝'}</div>
+      <div class="activity-body"><div class="activity-title">${esc(c?c.name:'Unknown')} — ${esc(v.outcome||v.type)}</div>
+      <div class="activity-meta">${formatDate(v.date)} · by ${esc(v.loggedBy||'')}${v.nextStep?' · next: '+esc(v.nextStep):''}</div></div></div>`;
   }).join('') : '<div class="empty-mini">No visits logged yet</div>';
   const withValue = state.companies.filter(c => Number(c.value) > 0).sort((a,b)=>Number(b.value)-Number(a.value)).slice(0, 8);
   document.getElementById('pipelineList').innerHTML = withValue.length ? withValue.map(c=>{
-    const total = withValue.reduce((s,x)=>s+Number(x.value||0),0);
-    const pct = (Number(c.value)/total)*100;
+    const total = withValue.reduce((s,x)=>s+Number(x.value||0),0); const pct = (Number(c.value)/total)*100;
     return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px">
       <div style="flex:0 0 140px;font-weight:500">${esc(c.name)}</div>
-      <div style="flex:1;height:18px;background:var(--bg-sunken);border-radius:var(--radius);position:relative">
-        <div style="width:${pct}%;height:100%;background:var(--accent-soft);border-radius:var(--radius)"></div>
-      </div>
-      <div style="flex:0 0 80px;text-align:right;font-weight:500">$${Number(c.value).toLocaleString()}</div>
-    </div>`;
+      <div style="flex:1;height:18px;background:var(--bg-sunken);border-radius:var(--radius);position:relative"><div style="width:${pct}%;height:100%;background:var(--accent-soft);border-radius:var(--radius)"></div></div>
+      <div style="flex:0 0 80px;text-align:right;font-weight:500">$${Number(c.value).toLocaleString()}</div></div>`;
   }).join('') : '<div class="empty-mini">Add pipeline values to companies to see this chart</div>';
   const today = new Date(); today.setHours(0,0,0,0);
   const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate()+7);
   const due = state.tasks.filter(t => t.date && new Date(t.date) <= weekEnd && t.status !== 'Done').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   document.getElementById('dueThisWeek').innerHTML = due.length ? due.slice(0,10).map(t=>{
-    const c = state.companies.find(x=>x.id===t.companyId);
-    const overdue = new Date(t.date) < today;
+    const c = state.companies.find(x=>x.id===t.companyId); const overdue = new Date(t.date) < today;
     return `<div onclick="switchTab('tasks');setTimeout(()=>openTaskModal('${t.id}'),100)" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--bg-sunken)'" onmouseout="this.style.background=''">
-      <span class="status-pill ${overdue?'status-Lost':'status-Visited'}" style="font-size:10px">${formatDate(t.date)}</span>
-      <span style="flex:1">${esc(t.name)}</span>
-      ${c?`<span style="font-size:11px;color:var(--ink-mute)">${esc(c.name)}</span>`:''}
-    </div>`;
+      <span class="status-pill ${overdue?'status-Lost':'status-Visited'}" style="font-size:10px">${formatDate(t.date)}</span><span style="flex:1">${esc(t.name)}</span>
+      ${c?`<span style="font-size:11px;color:var(--ink-mute)">${esc(c.name)}</span>`:''}</div>`;
   }).join('') : '<div class="empty-mini">Nothing due this week 🎉</div>';
 }
 
@@ -1541,8 +1393,7 @@ function computeStats(){
   const won = state.companies.filter(c=>c.status==='Won').length;
   const quoted = state.companies.filter(c=>['Quoted','Won','Lost'].includes(c.status)).length;
   return {
-    totalCompanies: state.companies.length,
-    activeCompanies: state.companies.filter(c=>c.status!=='Lost').length,
+    totalCompanies: state.companies.length, activeCompanies: state.companies.filter(c=>c.status!=='Lost').length,
     pipelineValue: state.companies.reduce((s,c)=>s+Number(c.value||0),0),
     pipelineCount: state.companies.filter(c=>Number(c.value)>0).length,
     visitsThisWeek, visitsLastWeek,
@@ -1554,157 +1405,102 @@ function computeStats(){
 }
 
 function esc(s){ return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function formatDate(d){
-  if(!d) return '';
-  const dt = new Date(d);
-  if(isNaN(dt)) return d;
-  return dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' });
-}
+function formatDate(d){ if(!d) return ''; const dt = new Date(d); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' }); }
 
 function initApp(){ showApp(); loadCache(); refreshAll(); initAuth(); }
 function forceSync(){ if(accessToken) pullAll(); else toast('Sign in first', true); }
 
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-  if(e.key === 'n' || e.key === 'N'){
-    if(state.currentTab === 'companies') openCompanyModal();
-    else openTaskModal();
-  }
+  if(e.key === 'n' || e.key === 'N'){ if(state.currentTab === 'companies') openCompanyModal(); else openTaskModal(); }
   if(e.key === 'Escape'){ document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open')); }
 });
-
 setInterval(()=>{ if(accessToken && document.visibilityState === 'visible') pullAll(); }, 60000);
 
 initApp();
 
-/* ============ CHAT AGENT v3: 13 tools, delete confirmation, query support ============ */
+/* ============ CHAT AGENT v3: 13 tools, delete→archive, query support ============ */
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
- 
+
 (function chatInit(){
-  const fab      = document.getElementById("chatFab");
-  const panel    = document.getElementById("chatPanel");
+  const fab = document.getElementById("chatFab");
+  const panel = document.getElementById("chatPanel");
   const closeBtn = document.getElementById("chatClose");
-  const msgs     = document.getElementById("chatMessages");
-  const input    = document.getElementById("chatInput");
-  const sendBtn  = document.getElementById("chatSend");
-  const attachBtn= document.getElementById("chatAttach");
-  const fileInp  = document.getElementById("chatFile");
-  const preview  = document.getElementById("chatPreview");
+  const msgs = document.getElementById("chatMessages");
+  const input = document.getElementById("chatInput");
+  const sendBtn = document.getElementById("chatSend");
+  const attachBtn = document.getElementById("chatAttach");
+  const fileInp = document.getElementById("chatFile");
+  const preview = document.getElementById("chatPreview");
   let chatHistory = [];
   let pendingImages = [];
- 
-  fab.addEventListener("click", () => {
-    panel.classList.toggle("open");
-    if (panel.classList.contains("open")) input.focus();
-  });
+
+  fab.addEventListener("click", () => { panel.classList.toggle("open"); if (panel.classList.contains("open")) input.focus(); });
   closeBtn.addEventListener("click", () => panel.classList.remove("open"));
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
-  });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } });
   sendBtn.addEventListener("click", sendChat);
   attachBtn.addEventListener("click", () => fileInp.click());
   fileInp.addEventListener("change", handleFiles);
- 
-  function bubble(text, cls){
-    const d = document.createElement("div");
-    d.className = "chatMsg " + cls;
-    d.textContent = text;
-    msgs.appendChild(d);
-    msgs.scrollTop = msgs.scrollHeight;
-    return d;
-  }
- 
+
+  function bubble(text, cls){ const d = document.createElement("div"); d.className = "chatMsg " + cls; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
+
   async function handleFiles(e){
-    const files = Array.from(e.target.files || []);
-    fileInp.value = "";
+    const files = Array.from(e.target.files || []); fileInp.value = "";
     for (const f of files){
       if (!f.type.startsWith("image/")) continue;
-      try {
-        const compressed = await compressImage(f, 1600, 0.82);
-        const id = Math.random().toString(36).slice(2,8);
+      try { const compressed = await compressImage(f, 1600, 0.82); const id = Math.random().toString(36).slice(2,8);
         pendingImages.push({ id, mediaType: "image/jpeg", data: compressed.base64, dataUrl: compressed.dataUrl });
       } catch(err){ bubble("Failed to read image: " + err.message, "error"); }
     }
     renderPreview();
   }
- 
+
   function compressImage(file, maxDim, quality){
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onerror = () => reject(new Error("read failed"));
       reader.onload = () => {
-        const img = new Image();
-        img.onerror = () => reject(new Error("decode failed"));
+        const img = new Image(); img.onerror = () => reject(new Error("decode failed"));
         img.onload = () => {
           let { width: w, height: h } = img;
-          if (w > maxDim || h > maxDim) {
-            const r = Math.min(maxDim / w, maxDim / h);
-            w = Math.round(w * r); h = Math.round(h * r);
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = w; canvas.height = h;
+          if (w > maxDim || h > maxDim) { const r = Math.min(maxDim / w, maxDim / h); w = Math.round(w * r); h = Math.round(h * r); }
+          const canvas = document.createElement("canvas"); canvas.width = w; canvas.height = h;
           canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-          const dataUrl = canvas.toDataURL("image/jpeg", quality);
-          const base64 = dataUrl.split(",")[1];
-          resolve({ dataUrl, base64 });
+          const dataUrl = canvas.toDataURL("image/jpeg", quality); resolve({ dataUrl, base64: dataUrl.split(",")[1] });
         };
         img.src = reader.result;
       };
       reader.readAsDataURL(file);
     });
   }
- 
+
   function renderPreview(){
     if (pendingImages.length === 0){ preview.classList.remove("show"); preview.innerHTML = ""; return; }
     preview.classList.add("show");
-    preview.innerHTML = pendingImages.map(img =>
-      `<div class="chatPreviewItem">
-        <img src="${img.dataUrl}" alt="">
-        <button onclick="window.__removeChatImg('${img.id}')" title="Remove">×</button>
-      </div>`
-    ).join("");
+    preview.innerHTML = pendingImages.map(img => `<div class="chatPreviewItem"><img src="${img.dataUrl}" alt=""><button onclick="window.__removeChatImg('${img.id}')" title="Remove">×</button></div>`).join("");
   }
   window.__removeChatImg = (id) => { pendingImages = pendingImages.filter(x => x.id !== id); renderPreview(); };
- 
+
   async function sendChat(){
-    const text = input.value.trim();
-    const images = pendingImages.slice();
+    const text = input.value.trim(); const images = pendingImages.slice();
     if (!text && images.length === 0) return;
     if (!accessToken) { bubble("Sign in first so I can write to your Sheet.", "error"); return; }
-    input.value = "";
-    pendingImages = [];
-    renderPreview();
-    sendBtn.disabled = true;
-    const displayText = text || `[${images.length} business card${images.length>1?'s':''} attached]`;
-    bubble(displayText, "user");
+    input.value = ""; pendingImages = []; renderPreview(); sendBtn.disabled = true;
+    bubble(text || `[${images.length} business card${images.length>1?'s':''} attached]`, "user");
     const thinking = bubble(images.length ? "Reading card(s)…" : "Thinking…", "system");
- 
     try {
-      // *** v3: send tasks + visits in context for query/stats tools ***
       const context = {
-        today: new Date().toISOString().slice(0,10),
-        user: "Prrithive",
+        today: new Date().toISOString().slice(0,10), user: "Prrithive",
         companies: state.companies.map(c => ({ id: c.id, name: c.name })),
         tasks: state.tasks.map(t => ({ id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee })),
         visits: state.visits.slice(-50).map(v => ({ date: v.date, type: v.type, companyId: v.companyId, outcome: v.outcome, loggedBy: v.loggedBy })),
-        categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks like "update LinkedIn" or "renew domain".'
+        categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.'
       };
-      const payload = {
-        message: text,
-        history: chatHistory,
-        context,
-        images: images.map(i => ({ mediaType: i.mediaType, data: i.data }))
-      };
-      const resp = await fetch(CHAT_WORKER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await resp.json();
-      thinking.remove();
+      const resp = await fetch(CHAT_WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history: chatHistory, context, images: images.map(i => ({ mediaType: i.mediaType, data: i.data })) }) });
+      const data = await resp.json(); thinking.remove();
       if (!resp.ok) { bubble("Error: " + (data.error || "unknown"), "error"); return; }
       if (data.reply) bubble(data.reply, "assistant");
- 
       if (data.toolCalls && data.toolCalls.length) {
         const createdByName = {};
         for (const call of data.toolCalls) {
@@ -1714,209 +1510,115 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
               if (createdByName[key]) call.input.companyId = createdByName[key];
             }
             const result = await executeChatToolCall(call);
-            if (call.name === "add_company" && result.id && result.name) {
-              createdByName[result.name.toLowerCase().trim()] = result.id;
-            }
+            if (call.name === "add_company" && result.id && result.name) createdByName[result.name.toLowerCase().trim()] = result.id;
             bubble("✓ " + result.summary, "action");
-          } catch (err) {
-            bubble("✗ " + call.name + " failed: " + (err.message || err), "error");
-          }
+          } catch (err) { bubble("✗ " + call.name + " failed: " + (err.message || err), "error"); }
         }
-        refreshAll();
-        cacheLocal();
+        refreshAll(); cacheLocal();
       }
- 
       chatHistory.push({ role: "user", content: text || "(business card image)" });
       if (data.reply) chatHistory.push({ role: "assistant", content: data.reply });
       if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
-    } catch (err) {
-      thinking.remove();
-      bubble("Network error: " + err.message, "error");
-    } finally {
-      sendBtn.disabled = false;
-      input.focus();
-    }
+    } catch (err) { thinking.remove(); bubble("Network error: " + err.message, "error"); }
+    finally { sendBtn.disabled = false; input.focus(); }
   }
- 
-  // ===== TOOL EXECUTION — v3: 13 tools =====
+
   async function executeChatToolCall(call) {
     const { name, input: args } = call;
     switch (name) {
       case "add_task": {
         const defaultCat = args.companyId ? 'Sales' : 'Personal';
-        const t = {
-          id: newId('TSK'), name: args.name,
-          status: args.status || 'Not started', priority: args.priority || 'Medium',
-          date: args.date || '', duration: args.duration || '',
-          assignee: args.assignee || 'Son', category: args.category || defaultCat,
-          companyId: args.companyId || '', notes: args.notes || '', links: args.links || '',
-          createdAt: nowIso(), updatedAt: nowIso()
-        };
-        state.tasks.push(t);
-        await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
+        const t = { id: newId('TSK'), name: args.name, status: args.status || 'Not started', priority: args.priority || 'Medium',
+          date: args.date || '', duration: args.duration || '', assignee: args.assignee || 'Son', category: args.category || defaultCat,
+          companyId: args.companyId || '', notes: args.notes || '', links: args.links || '', createdAt: nowIso(), updatedAt: nowIso() };
+        state.tasks.push(t); await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
         const co = state.companies.find(c => c.id === args.companyId);
         return { summary: `Added task "${t.name}"${co ? " for " + co.name : ""}${t.date ? " (" + formatDate(t.date) + ")" : ""}` };
       }
       case "update_task": {
-        const t = state.tasks.find(x => x.id === args.id);
-        if (!t) throw new Error("Task not found: " + args.id);
-        const id = t.id;
-        Object.assign(t, args); t.id = id; t.updatedAt = nowIso();
-        await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
-        return { summary: `Updated task "${t.name}"` };
+        const t = state.tasks.find(x => x.id === args.id); if (!t) throw new Error("Task not found: " + args.id);
+        const id = t.id; Object.assign(t, args); t.id = id; t.updatedAt = nowIso();
+        await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); return { summary: `Updated task "${t.name}"` };
       }
       case "delete_task": {
-        const t = state.tasks.find(x => x.id === args.id);
-        if (!t) throw new Error("Task not found: " + args.id);
-        const taskName = t.name;
-        state.tasks = state.tasks.filter(x => x.id !== args.id);
-        await deleteRowById(SHEET_TABS.tasks, args.id);
-        return { summary: `Deleted task "${taskName}"` };
+        const t = state.tasks.find(x => x.id === args.id); if (!t) throw new Error("Task not found: " + args.id);
+        const taskName = t.name; await archiveTask(args.id, 'deleted'); return { summary: `Archived task "${taskName}"` };
       }
       case "delete_company": {
-        const c = state.companies.find(x => x.id === args.id);
-        if (!c) throw new Error("Company not found: " + args.id);
-        const compName = c.name;
-        state.companies = state.companies.filter(x => x.id !== args.id);
-        await deleteRowById(SHEET_TABS.companies, args.id);
-        return { summary: `Deleted company "${compName}"` };
+        const c = state.companies.find(x => x.id === args.id); if (!c) throw new Error("Company not found: " + args.id);
+        const compName = c.name; state.companies = state.companies.filter(x => x.id !== args.id);
+        await deleteRowById(SHEET_TABS.companies, args.id); return { summary: `Deleted company "${compName}"` };
       }
       case "bulk_update_tasks": {
-        const matched = filterTasks(args.filter);
-        if (matched.length === 0) return { summary: "No tasks matched the filter" };
-        let count = 0;
+        const matched = chatFilterTasks(args.filter); if (matched.length === 0) return { summary: "No tasks matched the filter" };
         for (const t of matched) {
-          if (args.updates.status) t.status = args.updates.status;
-          if (args.updates.priority) t.priority = args.updates.priority;
-          if (args.updates.date) t.date = args.updates.date;
-          if (args.updates.assignee) t.assignee = args.updates.assignee;
-          if (args.updates.category) t.category = args.updates.category;
-          t.updatedAt = nowIso();
+          if (args.updates.status) t.status = args.updates.status; if (args.updates.priority) t.priority = args.updates.priority;
+          if (args.updates.date) t.date = args.updates.date; if (args.updates.assignee) t.assignee = args.updates.assignee;
+          if (args.updates.category) t.category = args.updates.category; t.updatedAt = nowIso();
           await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
-          count++;
         }
-        return { summary: `Updated ${count} task${count !== 1 ? 's' : ''}` };
+        return { summary: `Updated ${matched.length} task${matched.length !== 1 ? 's' : ''}` };
       }
       case "bulk_delete_tasks": {
-        const matched = filterTasks(args.filter);
-        if (matched.length === 0) return { summary: "No tasks matched the filter" };
+        const matched = chatFilterTasks(args.filter); if (matched.length === 0) return { summary: "No tasks matched the filter" };
         let count = 0;
-        for (const t of matched) {
-          state.tasks = state.tasks.filter(x => x.id !== t.id);
-          await deleteRowById(SHEET_TABS.tasks, t.id);
-          count++;
-        }
-        return { summary: `Deleted ${count} task${count !== 1 ? 's' : ''}` };
+        for (const t of matched) { await archiveTask(t.id, 'deleted'); count++; }
+        return { summary: `Archived ${count} task${count !== 1 ? 's' : ''}` };
       }
       case "query_tasks": {
-        const matched = filterTasks(args.filter);
-        const summaryLines = matched.slice(0, 20).map(t => {
-          const co = state.companies.find(c => c.id === t.companyId);
-          return `• ${t.name} [${t.status}]${t.date ? ' ' + formatDate(t.date) : ''}${co ? ' — ' + co.name : ''}`;
-        });
-        return { summary: `Found ${matched.length} task${matched.length !== 1 ? 's' : ''}`, data: matched, formatted: summaryLines.join('\n') };
+        const matched = chatFilterTasks(args.filter);
+        return { summary: `Found ${matched.length} task${matched.length !== 1 ? 's' : ''}` };
       }
       case "query_companies": {
-        const matched = filterCompanies(args.filter);
-        const summaryLines = matched.slice(0, 20).map(c => {
-          return `• ${c.name} [${c.status||'Prospect'}]${c.lastInteraction ? ' last: ' + formatDate(c.lastInteraction) : ''}${c.value ? ' $' + Number(c.value).toLocaleString() : ''}`;
-        });
-        return { summary: `Found ${matched.length} compan${matched.length !== 1 ? 'ies' : 'y'}`, data: matched, formatted: summaryLines.join('\n') };
+        const matched = chatFilterCompanies(args.filter);
+        return { summary: `Found ${matched.length} compan${matched.length !== 1 ? 'ies' : 'y'}` };
       }
       case "get_briefing": {
         const targetDate = args.date || new Date().toISOString().slice(0, 10);
         const todayD = new Date(targetDate);
         const todayTasks = state.tasks.filter(t => t.date === targetDate && t.status !== 'Done');
         const overdueTasks = state.tasks.filter(t => t.date && new Date(t.date) < todayD && t.status !== 'Done');
-        const upcoming3 = state.tasks.filter(t => {
-          if (!t.date || t.status === 'Done') return false;
-          const diff = (new Date(t.date) - todayD) / 86400000;
-          return diff > 0 && diff <= 3;
-        });
-        const parts = [];
-        parts.push(`📅 ${todayTasks.length} task${todayTasks.length !== 1 ? 's' : ''} today`);
+        const parts = [`📅 ${todayTasks.length} task${todayTasks.length !== 1 ? 's' : ''} today`];
         if (overdueTasks.length) parts.push(`⚠ ${overdueTasks.length} overdue`);
-        if (upcoming3.length) parts.push(`📌 ${upcoming3.length} due in next 3 days`);
-        return { summary: parts.join(' · '), data: { todayTasks, overdueTasks, upcoming3 } };
+        return { summary: parts.join(' · ') };
       }
       case "get_stats": {
-        const metric = args.metric || 'general';
-        const today = new Date();
-        const statsResult = {};
-        if (metric === 'visits_comparison' || metric === 'general') {
-          const thisMonthStr = today.toISOString().slice(0,7);
-          const lastMonthDate = new Date(today); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
-          const lastMonthStr = lastMonthDate.toISOString().slice(0,7);
-          statsResult.visitsThisMonth = state.visits.filter(v => v.date && v.date.slice(0,7) === thisMonthStr).length;
-          statsResult.visitsLastMonth = state.visits.filter(v => v.date && v.date.slice(0,7) === lastMonthStr).length;
-        }
-        if (metric === 'task_completion' || metric === 'general') {
-          const done = state.tasks.filter(t => t.status === 'Done').length;
-          const total = state.tasks.length;
-          statsResult.completionRate = total ? Math.round((done / total) * 100) : 0;
-          statsResult.done = done; statsResult.total = total;
-        }
-        if (metric === 'pipeline_summary' || metric === 'general') {
-          statsResult.pipelineTotal = state.companies.reduce((s, c) => s + Number(c.value || 0), 0);
-          statsResult.pipelineCount = state.companies.filter(c => Number(c.value) > 0).length;
-        }
-        if (metric === 'overdue_count' || metric === 'general') {
-          statsResult.overdueCount = state.tasks.filter(t => t.date && new Date(t.date) < today && t.status !== 'Done').length;
-        }
-        if (metric === 'company_status_breakdown') {
-          ['Prospect','Visited','Quoted','Won','Lost'].forEach(s => {
-            statsResult[s.toLowerCase()] = state.companies.filter(c => (c.status||'Prospect') === s).length;
-          });
-        }
-        return { summary: JSON.stringify(statsResult), data: statsResult };
+        const today = new Date(); const thisMonthStr = today.toISOString().slice(0,7);
+        const lastMonthDate = new Date(today); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const r = { visitsThisMonth: state.visits.filter(v => v.date && v.date.slice(0,7) === thisMonthStr).length,
+          visitsLastMonth: state.visits.filter(v => v.date && v.date.slice(0,7) === lastMonthDate.toISOString().slice(0,7)).length,
+          openTasks: state.tasks.filter(t => t.status !== 'Done').length,
+          overdueCount: state.tasks.filter(t => t.date && new Date(t.date) < today && t.status !== 'Done').length };
+        return { summary: JSON.stringify(r) };
       }
       case "add_company": {
-        const notesParts = [];
-        if (args.notes) notesParts.push(args.notes);
-        if (args.contactTitle) notesParts.push("Title: " + args.contactTitle);
-        const c = {
-          id: newId('CO'), name: args.name,
-          industry: args.industry || '', size: args.size || '', makes: args.makes || '',
-          address: args.address || '', contact: args.contact || '', phone: args.phone || '',
-          email: args.email || '', website: args.website || '', linkedin: args.linkedin || '',
-          status: args.status || 'Prospect', value: args.value ?? '', owner: args.owner || 'Son',
-          lastInteraction: '', notes: notesParts.join(' · '),
-          createdAt: nowIso(), updatedAt: nowIso()
-        };
-        state.companies.push(c);
-        await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
+        const notesParts = []; if (args.notes) notesParts.push(args.notes); if (args.contactTitle) notesParts.push("Title: " + args.contactTitle);
+        const c = { id: newId('CO'), name: args.name, industry: args.industry || '', size: args.size || '', makes: args.makes || '',
+          address: args.address || '', contact: args.contact || '', phone: args.phone || '', email: args.email || '',
+          website: args.website || '', linkedin: args.linkedin || '', status: args.status || 'Prospect', value: args.value ?? '',
+          owner: args.owner || 'Son', lastInteraction: '', notes: notesParts.join(' · '), createdAt: nowIso(), updatedAt: nowIso() };
+        state.companies.push(c); await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
         return { summary: `Added company "${c.name}"${c.contact ? " (" + c.contact + ")" : ""}`, id: c.id, name: c.name };
       }
       case "update_company": {
-        const c = state.companies.find(x => x.id === args.id);
-        if (!c) throw new Error("Company not found: " + args.id);
+        const c = state.companies.find(x => x.id === args.id); if (!c) throw new Error("Company not found: " + args.id);
         const id = c.id; Object.assign(c, args); c.id = id; c.updatedAt = nowIso();
-        await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
-        return { summary: `Updated ${c.name}` };
+        await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c); return { summary: `Updated ${c.name}` };
       }
       case "log_visit": {
-        const v = {
-          id: newId('VIS'), companyId: args.companyId, date: args.date, type: args.type,
-          outcome: args.outcome || 'Positive', notes: args.notes || '',
-          nextStep: args.nextStep || '', loggedBy: args.loggedBy || 'Son', createdAt: nowIso()
-        };
-        state.visits.push(v);
-        await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
+        const v = { id: newId('VIS'), companyId: args.companyId, date: args.date, type: args.type,
+          outcome: args.outcome || 'Positive', notes: args.notes || '', nextStep: args.nextStep || '',
+          loggedBy: args.loggedBy || 'Son', createdAt: nowIso() };
+        state.visits.push(v); await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
         const co = state.companies.find(x => x.id === args.companyId);
-        if (co && v.date) {
-          co.lastInteraction = v.date;
-          if (co.status === 'Prospect') co.status = 'Visited';
-          await upsertRow(SHEET_TABS.companies, COMPANY_COLS, co);
-        }
+        if (co && v.date) { co.lastInteraction = v.date; if (co.status === 'Prospect') co.status = 'Visited'; await upsertRow(SHEET_TABS.companies, COMPANY_COLS, co); }
         return { summary: `Logged ${args.type} visit${co ? " with " + co.name : ""} (${formatDate(v.date)})` };
       }
-      default:
-        throw new Error("Unknown tool: " + name);
+      default: throw new Error("Unknown tool: " + name);
     }
   }
- 
-  // ===== FILTER HELPERS for query/bulk tools =====
-  function filterTasks(filter) {
+
+  function chatFilterTasks(filter) {
     if (!filter) return state.tasks;
     const today = new Date(new Date().toDateString());
     return state.tasks.filter(t => {
@@ -1927,35 +1629,20 @@ const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
       if (filter.companyId && t.companyId !== filter.companyId) return false;
       if (filter.overdue && !(t.date && new Date(t.date) < today && t.status !== 'Done')) return false;
       if (filter.dateExact && t.date !== filter.dateExact) return false;
-      if (filter.dateRange) {
-        if (!t.date) return false;
-        if (filter.dateRange.from && t.date < filter.dateRange.from) return false;
-        if (filter.dateRange.to && t.date > filter.dateRange.to) return false;
-      }
-      if (filter.search) {
-        const s = filter.search.toLowerCase();
-        if (!(t.name||'').toLowerCase().includes(s) && !(t.notes||'').toLowerCase().includes(s)) return false;
-      }
+      if (filter.dateRange) { if (!t.date) return false; if (filter.dateRange.from && t.date < filter.dateRange.from) return false; if (filter.dateRange.to && t.date > filter.dateRange.to) return false; }
+      if (filter.search) { const s = filter.search.toLowerCase(); if (!(t.name||'').toLowerCase().includes(s) && !(t.notes||'').toLowerCase().includes(s)) return false; }
       return true;
     });
   }
- 
-  function filterCompanies(filter) {
+
+  function chatFilterCompanies(filter) {
     if (!filter) return state.companies;
     const today = new Date();
     return state.companies.filter(c => {
       if (filter.status && (c.status||'Prospect') !== filter.status) return false;
       if (filter.owner && c.owner !== filter.owner) return false;
-      if (filter.search) {
-        const s = filter.search.toLowerCase();
-        if (!((c.name||'')+(c.industry||'')+(c.notes||'')).toLowerCase().includes(s)) return false;
-      }
-      if (filter.noInteractionDays) {
-        if (c.lastInteraction) {
-          const daysSince = Math.floor((today - new Date(c.lastInteraction)) / 86400000);
-          if (daysSince < filter.noInteractionDays) return false;
-        }
-      }
+      if (filter.search) { const s = filter.search.toLowerCase(); if (!((c.name||'')+(c.industry||'')+(c.notes||'')).toLowerCase().includes(s)) return false; }
+      if (filter.noInteractionDays) { if (c.lastInteraction) { const daysSince = Math.floor((today - new Date(c.lastInteraction)) / 86400000); if (daysSince < filter.noInteractionDays) return false; } }
       return true;
     });
   }
