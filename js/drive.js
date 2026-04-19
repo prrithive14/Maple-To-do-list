@@ -142,10 +142,14 @@ async function handleTaskFileUpload(fileList) {
     toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached');
     // Mark task as having attachments
     var taskObj = state.tasks.find(function(x) { return x.id === taskId; });
-    if (taskObj && !taskObj.links) {
-      taskObj.links = 'drive-attached';
+    if (taskObj) {
+      if (!taskObj.links || taskObj.links.indexOf('drive-attached') === -1) {
+        taskObj.links = taskObj.links ? taskObj.links + ' | drive-attached' : 'drive-attached';
+      }
       taskObj.updatedAt = nowIso();
-      upsertRow(SHEET_TABS.tasks, TASK_COLS, taskObj).catch(function(e) { console.error('Failed to update task links', e); });
+      await upsertRow(SHEET_TABS.tasks, TASK_COLS, taskObj);
+      cacheLocal();
+      renderTaskView();
     }
     await renderTaskFiles(taskId);
   } catch (e) {
