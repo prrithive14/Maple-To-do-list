@@ -1,4 +1,4 @@
-/* chat.js — Chat agent v3: 13 tools + bulk import companies from Excel/CSV */
+/* chat.js — Chat agent v4: 15 tools (added request_review + respond_to_review) + bulk import */
 
 (function chatInit() {
   const fab = document.getElementById("chatFab");
@@ -14,8 +14,6 @@
   let pendingImages = [];
   let pendingImportData = null;
 
-  // Fields the chat agent is allowed to update — prevents accidental overwrite of
-  // id/createdAt/etc. if the LLM sends bad args.
   const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','companyId','notes','links'];
   const COMPANY_UPDATE_FIELDS = ['name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes'];
 
@@ -219,12 +217,16 @@
     bubble(text || "[" + images.length + " business card" + (images.length > 1 ? "s" : "") + " attached]", "user");
     const thinking = bubble(images.length ? "Reading card(s)…" : "Thinking…", "system");
     try {
+      // Include currentUser in context so the worker's LLM can reason about review actions.
+      // Also include per-task review state (lightweight — just reviewer + reviewStatus, not full history)
       const context = {
-        today: new Date().toISOString().slice(0,10), user: "Prrithive",
+        today: new Date().toISOString().slice(0,10),
+        user: getCurrentUser(),
         companies: state.companies.map(function(c) { return { id: c.id, name: c.name }; }),
-        tasks: state.tasks.map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee }; }),
+        tasks: state.tasks.map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee, reviewer: t.reviewer || '', reviewStatus: t.reviewStatus || '' }; }),
         visits: state.visits.slice(-50).map(function(v) { return { date: v.date, type: v.type, companyId: v.companyId, outcome: v.outcome, loggedBy: v.loggedBy }; }),
-        categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.'
+        categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.',
+        reviewGuide: 'Review workflow: tasks can have reviewer="Prrithive"|"Sridharan" and reviewStatus=""|"pending"|"changes_requested"|"approved". Use request_review to ask someone to review, respond_to_review to approve or request changes. Only the named reviewer can approve or request changes. Only the task assignee can re-request review after changes.'
       };
       const resp = await fetch(CHAT_WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, history: chatHistory, context: context, images: images.map(function(i) { return { mediaType: i.mediaType, data: i.data }; }) }) });
@@ -253,11 +255,16 @@
     finally { sendBtn.disabled = false; input.focus(); }
   }
 
-  // Safely apply only whitelisted field updates from a tool call to an object.
   function applyWhitelistedUpdates(target, args, whitelist) {
     for (const field of whitelist) {
       if (args[field] !== undefined) target[field] = args[field];
     }
+  }
+
+  // Format history entry same way as tasks.js (keep in sync!)
+  function formatHistoryEntry(author, message) {
+    var dateStr = new Date().toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+    return '[' + dateStr + ' - ' + author + ']: ' + (message || '');
   }
 
   async function executeChatToolCall(call) {
@@ -267,7 +274,8 @@
         const defaultCat = args.companyId ? 'Sales' : 'Personal';
         const t = { id: newId('TSK'), name: args.name, status: args.status || 'Not started', priority: args.priority || 'Medium',
           date: args.date || '', duration: args.duration || '', assignee: args.assignee || 'Prrithive', category: args.category || defaultCat,
-          companyId: args.companyId || '', notes: args.notes || '', links: args.links || '', createdAt: nowIso(), updatedAt: nowIso() };
+          companyId: args.companyId || '', notes: args.notes || '', links: args.links || '', createdAt: nowIso(), updatedAt: nowIso(),
+          reviewer: '', reviewStatus: '', reviewHistory: '' };
         state.tasks.push(t); await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
         const co = state.companies.find(function(c) { return c.id === args.companyId; });
         return { summary: 'Added task "' + t.name + '"' + (co ? " for " + co.name : "") + (t.date ? " (" + formatDate(t.date) + ")" : "") };
@@ -282,15 +290,61 @@
         const t = state.tasks.find(function(x) { return x.id === args.id; }); if (!t) throw new Error("Task not found: " + args.id);
         const taskName = t.name; await archiveTask(args.id, 'deleted'); return { summary: 'Archived task "' + taskName + '"' };
       }
+      case "request_review": {
+        // args: { taskId, reviewer, comment? }
+        const t = state.tasks.find(function(x){ return x.id === args.taskId; });
+        if (!t) throw new Error("Task not found: " + args.taskId);
+        if (!canUserReview()) throw new Error("Unknown user — cannot take review actions");
+        if (args.reviewer !== 'Prrithive' && args.reviewer !== 'Sridharan') throw new Error("Reviewer must be Prrithive or Sridharan");
+        if (args.reviewer === getCurrentUser()) throw new Error("Cannot request review from yourself");
+        t.reviewer = args.reviewer;
+        t.reviewStatus = 'pending';
+        const msg = 'Review requested from ' + args.reviewer + (args.comment ? ' — ' + args.comment : '');
+        const entry = formatHistoryEntry(getCurrentUser(), msg);
+        t.reviewHistory = t.reviewHistory ? (t.reviewHistory + '\n\n' + entry) : entry;
+        t.updatedAt = nowIso();
+        await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
+        return { summary: 'Requested review of "' + t.name + '" from ' + args.reviewer };
+      }
+      case "respond_to_review": {
+        // args: { taskId, response: "approve"|"request_changes"|"re_request", comment? }
+        const t = state.tasks.find(function(x){ return x.id === args.taskId; });
+        if (!t) throw new Error("Task not found: " + args.taskId);
+        if (!canUserReview()) throw new Error("Unknown user — cannot take review actions");
+        const me = getCurrentUser();
+        const resp = (args.response || '').toLowerCase();
+        if (resp === 'approve') {
+          if (t.reviewer !== me) throw new Error("Only the reviewer (" + t.reviewer + ") can approve");
+          if (t.reviewStatus !== 'pending') throw new Error("Review is not pending");
+          t.reviewStatus = 'approved';
+          const entry = formatHistoryEntry(me, 'Approved' + (args.comment ? ' — ' + args.comment : ''));
+          t.reviewHistory = t.reviewHistory ? (t.reviewHistory + '\n\n' + entry) : entry;
+        } else if (resp === 'request_changes') {
+          if (t.reviewer !== me) throw new Error("Only the reviewer (" + t.reviewer + ") can request changes");
+          if (t.reviewStatus !== 'pending') throw new Error("Review is not pending");
+          if (!args.comment) throw new Error("Comment is required when requesting changes");
+          t.reviewStatus = 'changes_requested';
+          const entry = formatHistoryEntry(me, 'Requested changes: ' + args.comment);
+          t.reviewHistory = t.reviewHistory ? (t.reviewHistory + '\n\n' + entry) : entry;
+        } else if (resp === 're_request') {
+          if (t.assignee !== me) throw new Error("Only the task assignee (" + t.assignee + ") can re-request review");
+          if (t.reviewStatus !== 'changes_requested') throw new Error("Can only re-request when changes are requested");
+          t.reviewStatus = 'pending';
+          const entry = formatHistoryEntry(me, 'Re-requested review' + (args.comment ? ': ' + args.comment : ''));
+          t.reviewHistory = t.reviewHistory ? (t.reviewHistory + '\n\n' + entry) : entry;
+        } else {
+          throw new Error("Unknown response: " + args.response + " (must be approve, request_changes, or re_request)");
+        }
+        t.updatedAt = nowIso();
+        await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
+        return { summary: 'Review ' + resp + ' on "' + t.name + '"' };
+      }
       case "delete_company": {
         const c = state.companies.find(function(x) { return x.id === args.id; }); if (!c) throw new Error("Company not found: " + args.id);
         const compName = c.name;
-
-        // Cascade: archive linked tasks (recoverable), hard-delete visits + visit prep
         const linkedTasks = state.tasks.filter(function(t) { return t.companyId === args.id; });
         const linkedVisits = state.visits.filter(function(v) { return v.companyId === args.id; });
         const linkedPrep = state.visitPreps.filter(function(p) { return p.companyId === args.id; });
-
         for (const t of linkedTasks) {
           try { await archiveTask(t.id, 'company_deleted'); }
           catch (e) { console.error('Cascade archive failed for task', t.id, e); }
@@ -307,10 +361,8 @@
             await deleteRowById(SHEET_TABS.visitprep, p.id);
           } catch (e) { console.error('Cascade delete failed for visit prep', p.id, e); }
         }
-
         state.companies = state.companies.filter(function(x) { return x.id !== args.id; });
         await deleteRowById(SHEET_TABS.companies, args.id);
-
         const parts = ['Deleted company "' + compName + '"'];
         if (linkedTasks.length) parts.push('archived ' + linkedTasks.length + ' task' + (linkedTasks.length !== 1 ? 's' : ''));
         if (linkedVisits.length) parts.push('deleted ' + linkedVisits.length + ' visit' + (linkedVisits.length !== 1 ? 's' : ''));
@@ -335,7 +387,7 @@
       case "query_companies": { const matched = chatFilterCompanies(args.filter); return { summary: "Found " + matched.length + " compan" + (matched.length !== 1 ? "ies" : "y") }; }
       case "get_briefing": {
         const targetDate = args.date || new Date().toISOString().slice(0, 10);
-        const todayD = new Date(new Date().toDateString());  // midnight today
+        const todayD = new Date(new Date().toDateString());
         const todayTasks = state.tasks.filter(function(t) { return t.date === targetDate && t.status !== 'Done'; });
         const overdueTasks = state.tasks.filter(function(t) { return t.date && new Date(t.date) < todayD && t.status !== 'Done'; });
         const parts = ["📅 " + todayTasks.length + " task" + (todayTasks.length !== 1 ? "s" : "") + " today"];
@@ -343,7 +395,6 @@
         return { summary: parts.join(' · ') };
       }
       case "get_stats": {
-        // Use midnight today for overdue consistency with rest of the app
         const today = new Date(new Date().toDateString());
         const thisMonthStr = today.toISOString().slice(0,7);
         const lastMonthDate = new Date(today); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
@@ -394,6 +445,8 @@
       if (filter.dateExact && t.date !== filter.dateExact) return false;
       if (filter.dateRange) { if (!t.date) return false; if (filter.dateRange.from && t.date < filter.dateRange.from) return false; if (filter.dateRange.to && t.date > filter.dateRange.to) return false; }
       if (filter.search) { var s = filter.search.toLowerCase(); if ((t.name||'').toLowerCase().indexOf(s) === -1 && (t.notes||'').toLowerCase().indexOf(s) === -1) return false; }
+      if (filter.reviewer) { if (t.reviewer !== filter.reviewer) return false; }
+      if (filter.reviewStatus) { if (t.reviewStatus !== filter.reviewStatus) return false; }
       return true;
     });
   }
