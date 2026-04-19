@@ -285,8 +285,8 @@
   </div>
   <div id="chatPreview"></div>
   <div id="chatInputRow">
-    <input type="file" id="chatFile" accept="image/*" multiple capture="environment" style="display:none">
-    <button id="chatAttach" title="Attach business card(s)">📎</button>
+    <input type="file" id="chatFile" accept="image/*,.xlsx,.xls,.csv" multiple style="display:none">
+    <button id="chatAttach" title="Attach files (business cards, Excel, CSV)">📎</button>
     <textarea id="chatInput" placeholder="Tell me what to do…" rows="1"></textarea>
     <button id="chatSend">Send</button>
   </div>
@@ -294,6 +294,7 @@
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <!-- Load order matters: config first, then state, then API, then features, then app init last -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="js/config.js"></script>
 <script src="js/state.js"></script>
 <script src="js/auth.js"></script>
