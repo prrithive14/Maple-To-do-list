@@ -28,7 +28,7 @@ function vpHasNote(cid,pi,ii){return(getVPItemNote(cid,pi,ii)).length>0;}
 async function vpSave(cid,upd){
   var v=getVP(cid);
   if(v){Object.keys(upd).forEach(function(k){v[k]=upd[k];});v.updatedAt=nowIso();await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,v);}
-  else{var n={companyId:cid,checks:upd.checks||'[]',notes:upd.notes||'{}',leadRating:upd.leadRating||'',visitDate:upd.visitDate||'',updatedAt:nowIso()};state.visitPreps.push(n);await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,n);}
+  else{var n={id:cid,companyId:cid,checks:upd.checks||'[]',notes:upd.notes||'{}',leadRating:upd.leadRating||'',visitDate:upd.visitDate||'',updatedAt:nowIso()};state.visitPreps.push(n);await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,n);}
   cacheLocal();
 }
 async function vpToggleCheck(cid,pi,ii){var c=getVPChecks(cid),k=pi+'-'+ii,i=c.indexOf(k);if(i!==-1)c.splice(i,1);else c.push(k);await vpSave(cid,{checks:JSON.stringify(c)});vpRenderChecklist(cid);}
@@ -149,7 +149,7 @@ function vpRenderChecklist(cid){
   // Visit date
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
   h+='<span style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Visit Date:</span>';
-  h+='<input type="date" id="vpVisitDate" value="'+esc(vd)+'" onchange="vpSetVisitDate(\''+cid+'\')" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card);color:var(--ink);font-size:12px;font-family:inherit">';
+  h+='<input type="date" id="vpVisitDate" value="'+esc((vd||'').slice(0,10))+'" onchange="vpSetVisitDate(\''+cid+'\')" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card);color:var(--ink);font-size:12px;font-family:inherit">';
   if(vd){var daysUntil=Math.ceil((new Date(vd)-new Date(new Date().toDateString()))/86400000);
     if(daysUntil>0)h+='<span style="font-size:11px;color:var(--accent);font-weight:500">in '+daysUntil+' day'+(daysUntil!==1?'s':'')+'</span>';
     else if(daysUntil===0)h+='<span style="font-size:11px;color:var(--green);font-weight:600">Today!</span>';
