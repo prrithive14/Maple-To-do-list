@@ -90,9 +90,10 @@ async function getTaskFilesFolder() {
   return await findOrCreateFolder('Task Files', rootId);
 }
 
-async function getTaskFolder(taskId) {
+async function getTaskFolder(taskId, taskName) {
   const parentId = await getTaskFilesFolder();
-  return await findOrCreateFolder(taskId, parentId);
+  const folderName = taskName || taskId;
+  return await findOrCreateFolder(folderName, parentId);
 }
 
 async function renderTaskFiles(taskId) {
@@ -105,7 +106,8 @@ async function renderTaskFiles(taskId) {
 
   grid.innerHTML = '<div class="empty-mini" style="font-style:italic">Loading files...</div>';
   try {
-    const folderId = await getTaskFolder(taskId);
+    const tsk = state.tasks.find(function(x) { return x.id === taskId; });
+    const folderId = await getTaskFolder(taskId, tsk ? tsk.name : taskId);
     document.getElementById('taskFileDropZone').dataset.folderId = folderId;
     document.getElementById('taskFileDropZone').dataset.taskId = taskId;
     const files = await listFilesInFolder(folderId);
@@ -131,12 +133,20 @@ async function handleTaskFileUpload(fileList) {
   if (!taskId) { toast('No task selected', true); return; }
   const progress = document.getElementById('taskFileProgress'); progress.classList.add('show');
   try {
-    const folderId = document.getElementById('taskFileDropZone').dataset.folderId || await getTaskFolder(taskId);
+    var tsk2 = state.tasks.find(function(x) { return x.id === taskId; });
+    const folderId = document.getElementById('taskFileDropZone').dataset.folderId || await getTaskFolder(taskId, tsk2 ? tsk2.name : taskId);
     for (var i = 0; i < files.length; i++) {
       progress.textContent = 'Uploading ' + (i+1) + '/' + files.length + ': ' + files[i].name + '...';
       await uploadFileToDrive(files[i], folderId);
     }
     toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached');
+    // Mark task as having attachments
+    var taskObj = state.tasks.find(function(x) { return x.id === taskId; });
+    if (taskObj && !taskObj.links) {
+      taskObj.links = 'drive-attached';
+      taskObj.updatedAt = nowIso();
+      upsertRow(SHEET_TABS.tasks, TASK_COLS, taskObj).catch(function(e) { console.error('Failed to update task links', e); });
+    }
     await renderTaskFiles(taskId);
   } catch (e) {
     console.error('Task upload error', e);
