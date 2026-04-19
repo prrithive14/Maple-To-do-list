@@ -8,6 +8,7 @@ function switchTab(name) {
   if(name==='dashboard') renderDashboard();
   else if(name==='companies') renderCompanies();
   else if(name==='archive') renderArchive();
+  else if(name==='visitprep') renderVisitPrep();
   else renderTaskView();
 }
 
@@ -16,6 +17,7 @@ function refreshAll() {
   refreshOverdueAlert(); refreshTaskCount();
   document.getElementById('countCompanies').textContent = state.companies.length;
   document.getElementById('countArchive').textContent = state.deleted.length;
+  if(state.currentTab === 'visitprep') renderVisitPrep();
   if(state.currentTab === 'archive') renderArchive();
   const overdueCount = getOverdueTasks().length;
   if(overdueCount >= 3 && !sessionStorage.getItem('maple_overdue_shown')) {
