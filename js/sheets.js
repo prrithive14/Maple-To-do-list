@@ -80,7 +80,7 @@ async function ensureVisitPrepSheet() {
     headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'VisitPrep' } } }] })
   });
-  await sheetsWrite('VisitPrep!A1:E1', [VISITPREP_COLS]);
+  await sheetsWrite('VisitPrep!A1:F1', [VISITPREP_COLS]);
 }
 
 async function pullAll() {
