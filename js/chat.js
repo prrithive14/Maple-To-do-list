@@ -14,6 +14,11 @@
   let pendingImages = [];
   let pendingImportData = null;
 
+  // Fields the chat agent is allowed to update — prevents accidental overwrite of
+  // id/createdAt/etc. if the LLM sends bad args.
+  const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','companyId','notes','links'];
+  const COMPANY_UPDATE_FIELDS = ['name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes'];
+
   fab.addEventListener("click", () => { panel.classList.toggle("open"); if (panel.classList.contains("open")) input.focus(); });
   closeBtn.addEventListener("click", () => panel.classList.remove("open"));
   input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } });
@@ -248,6 +253,13 @@
     finally { sendBtn.disabled = false; input.focus(); }
   }
 
+  // Safely apply only whitelisted field updates from a tool call to an object.
+  function applyWhitelistedUpdates(target, args, whitelist) {
+    for (const field of whitelist) {
+      if (args[field] !== undefined) target[field] = args[field];
+    }
+  }
+
   async function executeChatToolCall(call) {
     const name = call.name, args = call.input;
     switch (name) {
@@ -262,7 +274,8 @@
       }
       case "update_task": {
         const t = state.tasks.find(function(x) { return x.id === args.id; }); if (!t) throw new Error("Task not found: " + args.id);
-        const tid = t.id; Object.assign(t, args); t.id = tid; t.updatedAt = nowIso();
+        applyWhitelistedUpdates(t, args, TASK_UPDATE_FIELDS);
+        t.updatedAt = nowIso();
         await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); return { summary: 'Updated task "' + t.name + '"' };
       }
       case "delete_task": {
@@ -271,15 +284,44 @@
       }
       case "delete_company": {
         const c = state.companies.find(function(x) { return x.id === args.id; }); if (!c) throw new Error("Company not found: " + args.id);
-        const compName = c.name; state.companies = state.companies.filter(function(x) { return x.id !== args.id; });
-        await deleteRowById(SHEET_TABS.companies, args.id); return { summary: 'Deleted company "' + compName + '"' };
+        const compName = c.name;
+
+        // Cascade: archive linked tasks (recoverable), hard-delete visits + visit prep
+        const linkedTasks = state.tasks.filter(function(t) { return t.companyId === args.id; });
+        const linkedVisits = state.visits.filter(function(v) { return v.companyId === args.id; });
+        const linkedPrep = state.visitPreps.filter(function(p) { return p.companyId === args.id; });
+
+        for (const t of linkedTasks) {
+          try { await archiveTask(t.id, 'company_deleted'); }
+          catch (e) { console.error('Cascade archive failed for task', t.id, e); }
+        }
+        for (const v of linkedVisits) {
+          try {
+            state.visits = state.visits.filter(function(x) { return x.id !== v.id; });
+            await deleteRowById(SHEET_TABS.visits, v.id);
+          } catch (e) { console.error('Cascade delete failed for visit', v.id, e); }
+        }
+        for (const p of linkedPrep) {
+          try {
+            state.visitPreps = state.visitPreps.filter(function(x) { return x.id !== p.id; });
+            await deleteRowById(SHEET_TABS.visitprep, p.id);
+          } catch (e) { console.error('Cascade delete failed for visit prep', p.id, e); }
+        }
+
+        state.companies = state.companies.filter(function(x) { return x.id !== args.id; });
+        await deleteRowById(SHEET_TABS.companies, args.id);
+
+        const parts = ['Deleted company "' + compName + '"'];
+        if (linkedTasks.length) parts.push('archived ' + linkedTasks.length + ' task' + (linkedTasks.length !== 1 ? 's' : ''));
+        if (linkedVisits.length) parts.push('deleted ' + linkedVisits.length + ' visit' + (linkedVisits.length !== 1 ? 's' : ''));
+        if (linkedPrep.length) parts.push('deleted visit prep');
+        return { summary: parts.join(', ') };
       }
       case "bulk_update_tasks": {
         const matched = chatFilterTasks(args.filter); if (matched.length === 0) return { summary: "No tasks matched the filter" };
         for (const t of matched) {
-          if (args.updates.status) t.status = args.updates.status; if (args.updates.priority) t.priority = args.updates.priority;
-          if (args.updates.date) t.date = args.updates.date; if (args.updates.assignee) t.assignee = args.updates.assignee;
-          if (args.updates.category) t.category = args.updates.category; t.updatedAt = nowIso();
+          applyWhitelistedUpdates(t, args.updates || {}, TASK_UPDATE_FIELDS);
+          t.updatedAt = nowIso();
           await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
         }
         return { summary: "Updated " + matched.length + " task" + (matched.length !== 1 ? "s" : "") };
@@ -293,7 +335,7 @@
       case "query_companies": { const matched = chatFilterCompanies(args.filter); return { summary: "Found " + matched.length + " compan" + (matched.length !== 1 ? "ies" : "y") }; }
       case "get_briefing": {
         const targetDate = args.date || new Date().toISOString().slice(0, 10);
-        const todayD = new Date(targetDate);
+        const todayD = new Date(new Date().toDateString());  // midnight today
         const todayTasks = state.tasks.filter(function(t) { return t.date === targetDate && t.status !== 'Done'; });
         const overdueTasks = state.tasks.filter(function(t) { return t.date && new Date(t.date) < todayD && t.status !== 'Done'; });
         const parts = ["📅 " + todayTasks.length + " task" + (todayTasks.length !== 1 ? "s" : "") + " today"];
@@ -301,7 +343,9 @@
         return { summary: parts.join(' · ') };
       }
       case "get_stats": {
-        const today = new Date(); const thisMonthStr = today.toISOString().slice(0,7);
+        // Use midnight today for overdue consistency with rest of the app
+        const today = new Date(new Date().toDateString());
+        const thisMonthStr = today.toISOString().slice(0,7);
         const lastMonthDate = new Date(today); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
         const r = { visitsThisMonth: state.visits.filter(function(v) { return v.date && v.date.slice(0,7) === thisMonthStr; }).length,
           visitsLastMonth: state.visits.filter(function(v) { return v.date && v.date.slice(0,7) === lastMonthDate.toISOString().slice(0,7); }).length,
@@ -320,7 +364,8 @@
       }
       case "update_company": {
         const c = state.companies.find(function(x) { return x.id === args.id; }); if (!c) throw new Error("Company not found: " + args.id);
-        const cid = c.id; Object.assign(c, args); c.id = cid; c.updatedAt = nowIso();
+        applyWhitelistedUpdates(c, args, COMPANY_UPDATE_FIELDS);
+        c.updatedAt = nowIso();
         await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c); return { summary: "Updated " + c.name };
       }
       case "log_visit": {
