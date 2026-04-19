@@ -49,7 +49,7 @@ function renderCompanies() {
 
 function openCompanyModal(id) {
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
-  const c = state.editingCompany || { id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'', website:'', linkedin:'', status:'Prospect', value:'', owner:'Son', lastInteraction:'', notes:'', createdAt: nowIso() };
+  const c = state.editingCompany || { id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'', website:'', linkedin:'', status:'Prospect', value:'', owner:'Prrithive', lastInteraction:'', notes:'', createdAt: nowIso() };
   document.getElementById('companyModalTitle').textContent = id ? 'Edit company' : 'New company';
   ['Name','Industry','Size','Makes','Address','Contact','Phone','Email','Website','LinkedIn','Status','Value','Owner','Last','Notes'].forEach(k => {
     const map = {Last:'lastInteraction'}; const key = map[k] || k.charAt(0).toLowerCase()+k.slice(1);
