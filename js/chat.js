@@ -125,7 +125,7 @@
       linkedin: get('linkedin', 'linkedin url', 'linkedin profile'),
       status: 'Prospect',
       value: get('value', 'pipeline', 'pipeline value', 'deal value', 'amount'),
-      owner: 'Son',
+      owner: 'Prrithive',
       notes: get('notes', 'comments', 'remarks'),
     };
   }
@@ -151,7 +151,7 @@
           contact: companyData.contact || '', phone: companyData.phone || '', email: companyData.email || '',
           website: companyData.website || '', linkedin: companyData.linkedin || '',
           status: companyData.status || 'Prospect', value: companyData.value || '',
-          owner: companyData.owner || 'Son', lastInteraction: '', notes: companyData.notes || '',
+          owner: companyData.owner || 'Prrithive', lastInteraction: '', notes: companyData.notes || '',
           createdAt: nowIso(), updatedAt: nowIso()
         };
         state.companies.push(c);
@@ -254,7 +254,7 @@
       case "add_task": {
         const defaultCat = args.companyId ? 'Sales' : 'Personal';
         const t = { id: newId('TSK'), name: args.name, status: args.status || 'Not started', priority: args.priority || 'Medium',
-          date: args.date || '', duration: args.duration || '', assignee: args.assignee || 'Son', category: args.category || defaultCat,
+          date: args.date || '', duration: args.duration || '', assignee: args.assignee || 'Prrithive', category: args.category || defaultCat,
           companyId: args.companyId || '', notes: args.notes || '', links: args.links || '', createdAt: nowIso(), updatedAt: nowIso() };
         state.tasks.push(t); await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);
         const co = state.companies.find(function(c) { return c.id === args.companyId; });
@@ -314,7 +314,7 @@
         const c = { id: newId('CO'), name: args.name, industry: args.industry || '', size: args.size || '', makes: args.makes || '',
           address: args.address || '', contact: args.contact || '', phone: args.phone || '', email: args.email || '',
           website: args.website || '', linkedin: args.linkedin || '', status: args.status || 'Prospect', value: args.value || '',
-          owner: args.owner || 'Son', lastInteraction: '', notes: notesParts.join(' · '), createdAt: nowIso(), updatedAt: nowIso() };
+          owner: args.owner || 'Prrithive', lastInteraction: '', notes: notesParts.join(' · '), createdAt: nowIso(), updatedAt: nowIso() };
         state.companies.push(c); await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c);
         return { summary: 'Added company "' + c.name + '"' + (c.contact ? " (" + c.contact + ")" : ""), id: c.id, name: c.name };
       }
@@ -326,7 +326,7 @@
       case "log_visit": {
         const v = { id: newId('VIS'), companyId: args.companyId, date: args.date, type: args.type,
           outcome: args.outcome || 'Positive', notes: args.notes || '', nextStep: args.nextStep || '',
-          loggedBy: args.loggedBy || 'Son', createdAt: nowIso() };
+          loggedBy: args.loggedBy || 'Prrithive', createdAt: nowIso() };
         state.visits.push(v); await upsertRow(SHEET_TABS.visits, VISIT_COLS, v);
         const co = state.companies.find(function(x) { return x.id === args.companyId; });
         if (co && v.date) { co.lastInteraction = v.date; if (co.status === 'Prospect') co.status = 'Visited'; await upsertRow(SHEET_TABS.companies, COMPANY_COLS, co); }
