@@ -1,7 +1,7 @@
 /* state.js — App state, cache, and utility functions */
 
 let state = {
-  companies: [], visits: [], tasks: [], deleted: [],
+  companies: [], visits: [], tasks: [], deleted: [], visitPreps: [],
   view: 'table', taskScope: 'all', taskView: 'kanban', currentTab: 'tasks',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
@@ -26,6 +26,7 @@ function tabKeyForName(tab) {
   if(tab===SHEET_TABS.companies) return 'companies';
   if(tab===SHEET_TABS.visits) return 'visits';
   if(tab===SHEET_TABS.deleted) return 'deleted';
+  if(tab===SHEET_TABS.visitprep) return 'visitPreps';
 }
 
 function categoryClass(cat) {
@@ -81,11 +82,11 @@ function resetApp() {
 }
 
 function cacheLocal() {
-  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, when: Date.now() }));
+  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, visitPreps: state.visitPreps, when: Date.now() }));
 }
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
-    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; }
+    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; }
   } catch(e){}
 }
