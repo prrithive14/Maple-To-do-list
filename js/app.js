@@ -1,5 +1,4 @@
 /* app.js — Init, tabs, keyboard shortcuts, auto-sync */
-
 function switchTab(name) {
   state.currentTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
@@ -11,10 +10,10 @@ function switchTab(name) {
   else if(name==='visitprep') renderVisitPrep();
   else renderTaskView();
 }
-
 function refreshAll() {
   populateFilterOptions(); renderTaskView(); renderCompanies(); renderDashboard();
   refreshOverdueAlert(); refreshTaskCount();
+  if (typeof refreshReviewAlert === 'function') refreshReviewAlert();  // review dot on Tasks tab
   document.getElementById('countCompanies').textContent = state.companies.length;
   document.getElementById('countArchive').textContent = state.deleted.length;
   if(state.currentTab === 'visitprep') renderVisitPrep();
@@ -24,7 +23,6 @@ function refreshAll() {
     sessionStorage.setItem('maple_overdue_shown', '1'); setTimeout(openOverdueModal, 800);
   }
 }
-
 function refreshTaskCount() {
   const scopedCount = state.tasks.filter(t => {
     if(state.taskScope === 'company') return !!t.companyId;
@@ -33,7 +31,6 @@ function refreshTaskCount() {
   }).length;
   document.getElementById('countTasks').textContent = scopedCount;
 }
-
 function populateFilterOptions() {
   const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
   const sel = document.getElementById('filterCategory');
@@ -46,19 +43,15 @@ function populateFilterOptions() {
   compSel.innerHTML = '<option value="">All companies</option>' + compOpts;
   tCompSel.innerHTML = '<option value="">— None —</option>' + compOpts;
 }
-
 function initApp() { showApp(); loadCache(); refreshAll(); initAuth(); }
 function forceSync() { if(accessToken) pullAll(); else toast('Sign in first', true); }
-
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
   if(e.key === 'n' || e.key === 'N') { if(state.currentTab === 'companies') openCompanyModal(); else openTaskModal(); }
   if(e.key === 'Escape') { document.querySelectorAll('.modal-backdrop.open').forEach(m=>m.classList.remove('open')); }
 });
-
 // Auto-sync every 60s
 setInterval(() => { if(accessToken && document.visibilityState === 'visible') pullAll(); }, 60000);
-
 // Boot
 initApp();
