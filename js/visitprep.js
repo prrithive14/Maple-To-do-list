@@ -1,4 +1,4 @@
-/* visitprep.js — Visit Prep with per-item notes, files, PDF export */
+/* visitprep.js — Visit Prep with search, filters, visit date, per-item notes/files, PDF */
 
 var VISIT_PREP_PARTS = [
   { title: "Company Research & Strategy", icon: "\ud83d\udd0d", color: "#6366F1",
@@ -11,11 +11,13 @@ var VISIT_PREP_PARTS = [
 var VP_TOTAL = VISIT_PREP_PARTS.reduce(function(s,p){return s+p.items.length;},0);
 var VP_LEADS = [{label:"Hot",emoji:"\ud83d\udd25",color:"#F87171"},{label:"Warm",emoji:"\ud83c\udf24",color:"#FBBF24"},{label:"Cold",emoji:"\u2744\ufe0f",color:"#60A5FA"}];
 var vpActiveId = null, vpExpanded = null;
+var vpSearchText = '', vpFilterLead = '', vpFilterProgress = '';
 
 function getVP(cid){return state.visitPreps.find(function(v){return v.companyId===cid;});}
 function getVPChecks(cid){var v=getVP(cid);if(!v||!v.checks)return[];try{return JSON.parse(v.checks);}catch(e){return[];}}
 function getVPNotes(cid){var v=getVP(cid);if(!v||!v.notes)return{};try{var p=JSON.parse(v.notes);return typeof p==='object'&&p!==null?p:{};}catch(e){return typeof v.notes==='string'?{_general:v.notes}:{};}}
 function getVPLead(cid){var v=getVP(cid);return v?v.leadRating||'':'';}
+function getVPVisitDate(cid){var v=getVP(cid);return v?v.visitDate||'':'';}
 function isVPC(cid,pi,ii){return getVPChecks(cid).indexOf(pi+'-'+ii)!==-1;}
 function getVPItemNote(cid,pi,ii){return getVPNotes(cid)[pi+'-'+ii]||'';}
 function getVPGenNotes(cid){return getVPNotes(cid)._general||'';}
@@ -26,38 +28,93 @@ function vpHasNote(cid,pi,ii){return(getVPItemNote(cid,pi,ii)).length>0;}
 async function vpSave(cid,upd){
   var v=getVP(cid);
   if(v){Object.keys(upd).forEach(function(k){v[k]=upd[k];});v.updatedAt=nowIso();await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,v);}
-  else{var n={companyId:cid,checks:upd.checks||'[]',notes:upd.notes||'{}',leadRating:upd.leadRating||'',updatedAt:nowIso()};state.visitPreps.push(n);await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,n);}
+  else{var n={companyId:cid,checks:upd.checks||'[]',notes:upd.notes||'{}',leadRating:upd.leadRating||'',visitDate:upd.visitDate||'',updatedAt:nowIso()};state.visitPreps.push(n);await upsertRow(SHEET_TABS.visitprep,VISITPREP_COLS,n);}
   cacheLocal();
 }
 async function vpToggleCheck(cid,pi,ii){var c=getVPChecks(cid),k=pi+'-'+ii,i=c.indexOf(k);if(i!==-1)c.splice(i,1);else c.push(k);await vpSave(cid,{checks:JSON.stringify(c)});vpRenderChecklist(cid);}
 async function vpSetLead(cid,l){var cur=getVPLead(cid);await vpSave(cid,{leadRating:cur===l?'':l});vpRenderChecklist(cid);}
+async function vpSetVisitDate(cid){var inp=document.getElementById('vpVisitDate');if(!inp)return;await vpSave(cid,{visitDate:inp.value});toast('Visit date saved');}
 async function vpSaveItemNote(cid,pi,ii){var ta=document.getElementById('vpN-'+pi+'-'+ii);if(!ta)return;var n=getVPNotes(cid);n[pi+'-'+ii]=ta.value;await vpSave(cid,{notes:JSON.stringify(n)});toast('Note saved');}
 async function vpSaveGenNotes(cid){var ta=document.getElementById('vpGen');if(!ta)return;var n=getVPNotes(cid);n._general=ta.value;await vpSave(cid,{notes:JSON.stringify(n)});toast('Notes saved');}
 
 function vpExpand(pi,ii){var k=pi+'-'+ii;vpExpanded=(vpExpanded===k)?null:k;vpRenderChecklist(vpActiveId);
-  if(vpExpanded===k&&vpActiveId){var co=state.companies.find(function(c){return c.id===vpActiveId;});if(co){var item=VISIT_PREP_PARTS[pi].items[ii];renderVPItemFiles(co.name,item,'vpF-'+pi+'-'+ii);}}
+  if(vpExpanded===k&&vpActiveId){var co=state.companies.find(function(c){return c.id===vpActiveId;});if(co){renderVPItemFiles(co.name,VISIT_PREP_PARTS[pi].items[ii],'vpF-'+pi+'-'+ii);}}
 }
 function vpFileBtn(pi,ii){var inp=document.getElementById('vpFI-'+pi+'-'+ii);if(inp)inp.click();}
 async function vpFileUpload(pi,ii,inp){if(!vpActiveId)return;var co=state.companies.find(function(c){return c.id===vpActiveId;});if(!co)return;await handleVPItemFileUpload(inp.files,co.name,VISIT_PREP_PARTS[pi].items[ii],'vpF-'+pi+'-'+ii);inp.value='';}
 
+function vpUpdateSearch(){var el=document.getElementById('vpSearch');vpSearchText=el?el.value.toLowerCase():'';renderVisitPrep();}
+function vpUpdateFilterLead(val){vpFilterLead=val;renderVisitPrep();}
+function vpUpdateFilterProgress(val){vpFilterProgress=val;renderVisitPrep();}
+
+function vpGetFilteredCompanies(){
+  var cos=state.companies.slice();
+  // Filter by search
+  if(vpSearchText){cos=cos.filter(function(c){return(c.name||'').toLowerCase().indexOf(vpSearchText)!==-1||(c.contact||'').toLowerCase().indexOf(vpSearchText)!==-1||(c.industry||'').toLowerCase().indexOf(vpSearchText)!==-1;});}
+  // Filter by lead
+  if(vpFilterLead){cos=cos.filter(function(c){return getVPLead(c.id)===vpFilterLead;});}
+  // Filter by progress
+  if(vpFilterProgress==='not-started'){cos=cos.filter(function(c){return vpProg(c.id)===0;});}
+  else if(vpFilterProgress==='in-progress'){cos=cos.filter(function(c){var p=vpProg(c.id);return p>0&&p<100;});}
+  else if(vpFilterProgress==='complete'){cos=cos.filter(function(c){return vpProg(c.id)===100;});}
+  // Sort: upcoming visit dates first, then no date
+  cos.sort(function(a,b){
+    var da=getVPVisitDate(a.id),db=getVPVisitDate(b.id);
+    if(da&&db)return da.localeCompare(db);
+    if(da)return -1;if(db)return 1;
+    return(a.name||'').localeCompare(b.name||'');
+  });
+  return cos;
+}
+
 function renderVisitPrep(){
   var root=document.getElementById('visitPrepContainer');if(!root)return;
   if(vpActiveId){vpRenderChecklist(vpActiveId);return;}
-  var cos=state.companies;
-  if(cos.length===0){root.innerHTML='<div class="empty"><h3>No companies yet</h3><p>Add companies in the Companies tab first.</p></div>';return;}
+  if(state.companies.length===0){root.innerHTML='<div class="empty"><h3>No companies yet</h3><p>Add companies in the Companies tab first.</p></div>';return;}
+
   var h='<div style="margin-bottom:16px"><h2 style="font-family:\'Fraunces\',serif;font-size:20px;font-weight:600;margin:0">Visit Preparation</h2></div>';
+
+  // Search + Filters
+  h+='<div class="filters" style="margin-bottom:16px">';
+  h+='<input class="search-input" id="vpSearch" placeholder="Search companies..." value="'+esc(vpSearchText)+'" oninput="vpUpdateSearch()">';
+  h+='<select class="filter-select" onchange="vpUpdateFilterLead(this.value)">';
+  h+='<option value=""'+(vpFilterLead===''?' selected':'')+'>All leads</option>';
+  VP_LEADS.forEach(function(o){h+='<option value="'+o.label+'"'+(vpFilterLead===o.label?' selected':'')+'>'+o.emoji+' '+o.label+'</option>';});
+  h+='<option value="none"'+(vpFilterLead==='none'?' selected':'')+'>Not rated</option>';
+  h+='</select>';
+  h+='<select class="filter-select" onchange="vpUpdateFilterProgress(this.value)">';
+  h+='<option value=""'+(vpFilterProgress===''?' selected':'')+'>All progress</option>';
+  h+='<option value="not-started"'+(vpFilterProgress==='not-started'?' selected':'')+'>Not started</option>';
+  h+='<option value="in-progress"'+(vpFilterProgress==='in-progress'?' selected':'')+'>In progress</option>';
+  h+='<option value="complete"'+(vpFilterProgress==='complete'?' selected':'')+'>Complete</option>';
+  h+='</select></div>';
+
+  var cos=vpGetFilteredCompanies();
+  if(cos.length===0){
+    h+='<div class="empty-mini">No companies match your filters</div>';
+    root.innerHTML=h;return;
+  }
+
   h+='<div style="display:flex;flex-direction:column;gap:10px">';
   cos.forEach(function(c){
-    var pr=vpProg(c.id),ld=getVPLead(c.id),lo=VP_LEADS.find(function(o){return o.label===ld;});
+    var pr=vpProg(c.id),ld=getVPLead(c.id),lo=VP_LEADS.find(function(o){return o.label===ld;}),vd=getVPVisitDate(c.id);
     h+='<div class="company-card" onclick="vpActiveId=\''+c.id+'\';vpExpanded=null;renderVisitPrep()" style="padding:14px">';
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
     h+='<span style="font-weight:600;font-size:15px;flex:1">'+esc(c.name)+'</span>';
     if(lo)h+='<span style="padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;color:'+lo.color+';border:1px solid '+lo.color+'">'+lo.emoji+' '+lo.label+'</span>';
     h+='<span style="font-size:12px;font-weight:600;color:'+(pr===100?'var(--green)':'var(--ink-mute)')+'">'+pr+'%</span></div>';
-    if(c.contact||c.industry){h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
-      if(c.contact)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.contact)+'</span>';
-      if(c.industry)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.industry)+'</span>';
-      h+='</div>';}
+
+    // Meta row: contact, industry, visit date
+    h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+    if(c.contact)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.contact)+'</span>';
+    if(c.industry)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.industry)+'</span>';
+    if(vd){
+      var isUpcoming=vd>=new Date().toISOString().slice(0,10);
+      h+='<span style="font-size:11px;color:'+(isUpcoming?'var(--accent)':'var(--ink-mute)')+';background:'+(isUpcoming?'rgba(184,69,31,0.08)':'var(--bg-sunken)')+';padding:2px 8px;border-radius:12px;font-weight:500">\ud83d\udcc5 '+formatDate(vd)+'</span>';
+    }
+    h+='</div>';
+
+    // Progress bars
     h+='<div style="display:flex;gap:8px">';
     VISIT_PREP_PARTS.forEach(function(part,pi){var pp=vpPartProg(c.id,pi);
       h+='<div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:3px">';
@@ -74,27 +131,45 @@ function renderVisitPrep(){
 function vpRenderChecklist(cid){
   var root=document.getElementById('visitPrepContainer');if(!root)return;
   var co=state.companies.find(function(c){return c.id===cid;});if(!co){vpActiveId=null;renderVisitPrep();return;}
-  var pr=vpProg(cid),ld=getVPLead(cid),gn=getVPGenNotes(cid);
+  var pr=vpProg(cid),ld=getVPLead(cid),gn=getVPGenNotes(cid),vd=getVPVisitDate(cid);
+
   var h='<button class="btn btn-sm" onclick="vpActiveId=null;vpExpanded=null;renderVisitPrep()" style="margin-bottom:16px">&larr; All Companies</button>';
-  // Header
+
+  // Header card
   h+='<div style="background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px">';
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
   h+='<h2 style="font-family:\'Fraunces\',serif;font-size:20px;font-weight:600;margin:0;flex:1">'+esc(co.name)+'</h2>';
   h+='<button class="btn btn-sm" onclick="vpPDF(\''+cid+'\')">&#128196; PDF</button></div>';
+
   if(co.contact||co.industry){h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
     if(co.contact)h+='<span style="font-size:11px;color:var(--green);background:rgba(74,124,78,0.1);padding:2px 10px;border-radius:12px">'+esc(co.contact)+'</span>';
     if(co.industry)h+='<span style="font-size:11px;color:var(--blue);background:rgba(74,108,138,0.1);padding:2px 10px;border-radius:12px">'+esc(co.industry)+'</span>';
     h+='</div>';}
+
+  // Visit date
+  h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
+  h+='<span style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Visit Date:</span>';
+  h+='<input type="date" id="vpVisitDate" value="'+esc(vd)+'" onchange="vpSetVisitDate(\''+cid+'\')" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card);color:var(--ink);font-size:12px;font-family:inherit">';
+  if(vd){var daysUntil=Math.ceil((new Date(vd)-new Date(new Date().toDateString()))/86400000);
+    if(daysUntil>0)h+='<span style="font-size:11px;color:var(--accent);font-weight:500">in '+daysUntil+' day'+(daysUntil!==1?'s':'')+'</span>';
+    else if(daysUntil===0)h+='<span style="font-size:11px;color:var(--green);font-weight:600">Today!</span>';
+    else h+='<span style="font-size:11px;color:var(--red);font-weight:500">'+Math.abs(daysUntil)+' day'+(Math.abs(daysUntil)!==1?'s':'')+' ago</span>';
+  }
+  h+='</div>';
+
+  // Progress
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden">';
   h+='<div style="height:100%;width:'+pr+'%;background:'+(pr===100?'var(--green)':'var(--accent)')+';border-radius:3px;transition:width 0.4s"></div></div>';
   h+='<span style="font-size:12px;font-weight:600;color:'+(pr===100?'var(--green)':'var(--ink-mute)')+'">'+pr+'%</span></div>';
+
+  // Lead
   h+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Lead:</span>';
   VP_LEADS.forEach(function(o){var a=ld===o.label;
     h+='<button onclick="vpSetLead(\''+cid+'\',\''+o.label+'\')" class="btn btn-sm" style="font-size:11px;padding:3px 12px;border-radius:20px;'+(a?'border-color:'+o.color+';color:'+o.color+';font-weight:700':'')+'">'+o.emoji+' '+o.label+'</button>';
   });
   h+='</div></div>';
 
-  // Sections
+  // Checklist sections
   VISIT_PREP_PARTS.forEach(function(part,pi){
     var pp=vpPartProg(cid,pi),ad=pp.done===pp.total;
     h+='<div style="background:var(--bg-card);border:1px solid '+(ad?part.color:'var(--line)')+';border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">';
@@ -114,7 +189,7 @@ function vpRenderChecklist(cid){
       if(ck)h+='<span style="color:#fff;font-size:12px;font-weight:900">&check;</span>';
       h+='</div>';
       h+='<span style="font-size:13px;color:'+(ck?'var(--ink-mute)':'var(--ink)')+';text-decoration:'+(ck?'line-through':'none')+';line-height:1.4;flex:1">'+esc(item)+'</span>';
-      if(hn)h+='<span style="font-size:10px;color:var(--ink-mute)" title="Has notes">&#128221;</span>';
+      if(hn)h+='<span style="font-size:10px;color:var(--ink-mute)">&#128221;</span>';
       h+='<span style="font-size:10px;color:var(--ink-mute);transform:rotate('+(exp?'180':'0')+'deg);transition:transform 0.2s">&#9660;</span></div>';
 
       if(exp){
@@ -138,9 +213,10 @@ function vpRenderChecklist(cid){
   root.innerHTML=h;
 }
 
+// PDF Export
 function vpPDF(cid){
   var co=state.companies.find(function(c){return c.id===cid;});if(!co)return;
-  var pr=vpProg(cid),ld=getVPLead(cid),gn=getVPGenNotes(cid);
+  var pr=vpProg(cid),ld=getVPLead(cid),gn=getVPGenNotes(cid),vd=getVPVisitDate(cid);
   var p='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Visit Prep - '+esc(co.name)+'</title>';
   p+='<style>body{font-family:Arial,sans-serif;color:#1a1a1a;max-width:700px;margin:0 auto;padding:40px 30px;font-size:13px;line-height:1.5}';
   p+='h1{font-size:22px;margin:0 0 4px;color:#b8451f}h2{font-size:15px;margin:24px 0 10px;padding:8px 12px;border-radius:6px}';
@@ -154,6 +230,7 @@ function vpPDF(cid){
   p+='<h1>Maple MPSS - Visit Prep</h1><div class="meta"><strong style="font-size:18px;color:#1a1a1a">'+esc(co.name)+'</strong><br>';
   if(co.contact)p+='Contact: '+esc(co.contact)+'<br>';
   if(co.industry)p+='Industry: '+esc(co.industry)+'<br>';
+  if(vd)p+='Visit Date: '+formatDate(vd)+'<br>';
   if(ld){var lo=VP_LEADS.find(function(o){return o.label===ld;});p+='Lead: <span style="padding:3px 12px;border-radius:20px;font-weight:700;font-size:12px;border:1px solid '+(lo?lo.color:'#999')+';color:'+(lo?lo.color:'#999')+'">'+ld+'</span><br>';}
   p+='Progress: '+pr+'% &middot; Generated: '+new Date().toLocaleDateString('en-CA')+'</div>';
   p+='<div class="pb"><div class="pf" style="width:'+pr+'%;background:'+(pr===100?'#4a7c4e':'#b8451f')+'"></div></div>';
