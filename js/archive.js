@@ -4,7 +4,7 @@ async function archiveTask(taskId, reason) {
   const t = state.tasks.find(x => x.id === taskId);
   if (!t) throw new Error("Task not found: " + taskId);
   const archiveRecord = { ...t, archivedAt: nowIso(), archiveReason: reason };
-  await sheetsAppend(`'Archive'!A1`, [objToRow(archiveRecord, ARCHIVE_COLS)]);
+  await sheetsAppend(`Archive!A1`, [objToRow(archiveRecord, ARCHIVE_COLS)]);
   await deleteRowById(SHEET_TABS.tasks, taskId);
   state.tasks = state.tasks.filter(x => x.id !== taskId);
   state.archived.push(archiveRecord);
