@@ -58,7 +58,7 @@ async function pullAll() {
       sheetsRead(`${SHEET_TABS.tasks}!A2:Z`),
       sheetsRead(`${SHEET_TABS.companies}!A2:Z`),
       sheetsRead(`${SHEET_TABS.visits}!A2:Z`),
-      sheetsRead(`${SHEET_TABS.archive}!A2:Z`).catch(() => []),
+      sheetsRead(`${SHEET_TABS.archive}!A2:O`).catch(() => []),
     ]);
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
