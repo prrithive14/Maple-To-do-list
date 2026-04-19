@@ -7,7 +7,9 @@ async function driveRequest(url, opts = {}) {
 }
 
 async function findOrCreateFolder(name, parentId) {
-  let q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  // Escape single quotes in name for the search query
+  const safeName = String(name).replace(/'/g, "\\'");
+  let q = `name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   if(parentId) q += ` and '${parentId}' in parents`;
   const search = await driveRequest(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`);
   if(search.files && search.files.length > 0) return search.files[0].id;
@@ -85,29 +87,29 @@ async function handleFileUpload(fileList) {
 function handleFileDrop(event) { const files = event.dataTransfer?.files; if(files && files.length > 0) handleFileUpload(files); }
 
 // ===== TASK FILE ATTACHMENTS =====
+// Folders are named by taskId (stable across renames). Old folders named by taskName
+// will still exist in Drive but won't be surfaced by the UI anymore — they're safe to
+// leave as-is, or you can manually move files into the new taskId folder if needed.
 async function getTaskFilesFolder() {
   const rootId = await getMapleRootFolder();
   return await findOrCreateFolder('Task Files', rootId);
 }
 
-async function getTaskFolder(taskId, taskName) {
+async function getTaskFolder(taskId) {
   const parentId = await getTaskFilesFolder();
-  const folderName = taskName || taskId;
-  return await findOrCreateFolder(folderName, parentId);
+  return await findOrCreateFolder(taskId, parentId);
 }
 
 async function renderTaskFiles(taskId) {
   const grid = document.getElementById('taskFiles'); if (!grid) return;
   if (!accessToken) { grid.innerHTML = '<div class="empty-mini">Sign in to see files</div>'; return; }
 
-  // Check if task has any files by looking at links field
   const t = state.tasks.find(function(x) { return x.id === taskId; });
   if (!t) return;
 
   grid.innerHTML = '<div class="empty-mini" style="font-style:italic">Loading files...</div>';
   try {
-    const tsk = state.tasks.find(function(x) { return x.id === taskId; });
-    const folderId = await getTaskFolder(taskId, tsk ? tsk.name : taskId);
+    const folderId = await getTaskFolder(taskId);
     document.getElementById('taskFileDropZone').dataset.folderId = folderId;
     document.getElementById('taskFileDropZone').dataset.taskId = taskId;
     const files = await listFilesInFolder(folderId);
@@ -133,8 +135,7 @@ async function handleTaskFileUpload(fileList) {
   if (!taskId) { toast('No task selected', true); return; }
   const progress = document.getElementById('taskFileProgress'); progress.classList.add('show');
   try {
-    var tsk2 = state.tasks.find(function(x) { return x.id === taskId; });
-    const folderId = document.getElementById('taskFileDropZone').dataset.folderId || await getTaskFolder(taskId, tsk2 ? tsk2.name : taskId);
+    const folderId = document.getElementById('taskFileDropZone').dataset.folderId || await getTaskFolder(taskId);
     for (var i = 0; i < files.length; i++) {
       progress.textContent = 'Uploading ' + (i+1) + '/' + files.length + ': ' + files[i].name + '...';
       await uploadFileToDrive(files[i], folderId);
@@ -167,58 +168,8 @@ function handleTaskFileDrop(event) {
 }
 
 // ===== VISIT PREP FILE ATTACHMENTS =====
-async function getVisitPrepFolder(companyName) {
-  const rootId = await getMapleRootFolder();
-  const vpRoot = await findOrCreateFolder('Visit Prep', rootId);
-  const companyFolder = await findOrCreateFolder(companyName, vpRoot);
-  return companyFolder;
-}
-
-async function getVisitPrepItemFolder(companyName, itemName) {
-  const companyFolder = await getVisitPrepFolder(companyName);
-  return await findOrCreateFolder(itemName, companyFolder);
-}
-
-async function renderVPItemFiles(companyName, partIdx, itemIdx, containerId) {
-  var grid = document.getElementById(containerId);
-  if (!grid) return;
-  if (!accessToken) { grid.innerHTML = ''; return; }
-  var itemName = VISIT_PREP_PARTS[partIdx].items[itemIdx].substring(0, 50);
-  grid.innerHTML = '<span style="font-size:11px;color:var(--ink-mute);font-style:italic">Loading...</span>';
-  try {
-    var folderId = await getVisitPrepItemFolder(companyName, itemName);
-    var files = await listFilesInFolder(folderId);
-    if (files.length === 0) { grid.innerHTML = ''; return; }
-    grid.innerHTML = files.map(function(f) {
-      var icon = fileIcon(f.mimeType);
-      return '<a href="' + f.webViewLink + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);font-size:11px;text-decoration:none;color:var(--ink);margin:2px" title="' + esc(f.name) + '">' + icon + ' ' + esc(f.name.length > 20 ? f.name.substring(0,18) + '…' : f.name) + '</a>';
-    }).join('');
-  } catch(e) {
-    console.error('VP files error', e);
-    grid.innerHTML = '';
-  }
-}
-
-async function handleVPItemFileUpload(companyName, partIdx, itemIdx, fileInput) {
-  var files = Array.from(fileInput.files || []);
-  if (files.length === 0) return;
-  if (!accessToken) { toast('Sign in first', true); return; }
-  var itemName = VISIT_PREP_PARTS[partIdx].items[itemIdx].substring(0, 50);
-  try {
-    var folderId = await getVisitPrepItemFolder(companyName, itemName);
-    for (var i = 0; i < files.length; i++) {
-      await uploadFileToDrive(files[i], folderId);
-    }
-    toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached');
-    var containerId = 'vpFiles-' + partIdx + '-' + itemIdx;
-    await renderVPItemFiles(companyName, partIdx, itemIdx, containerId);
-  } catch(e) {
-    toast('Upload failed: ' + e.message, true);
-  }
-  fileInput.value = '';
-}
-
-// ===== VISIT PREP FILE ATTACHMENTS =====
+// Single canonical definition. Folders are named after a sanitized version of the
+// checklist item text, under Visit Prep/<companyName>/<itemName>/.
 async function getVisitPrepFolder(companyName) {
   const rootId = await getMapleRootFolder();
   const vpRoot = await findOrCreateFolder('Visit Prep', rootId);
