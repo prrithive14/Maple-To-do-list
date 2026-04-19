@@ -250,4 +250,8 @@
   #chatPreview.show{display:flex}
   .chatPreviewItem{position:relative;width:48px;height:48px;border-radius:var(--radius);overflow:hidden;border:1px solid var(--line)}
   .chatPreviewItem img{width:100%;height:100%;object-fit:cover;display:block}
-  .chatPreviewItem button{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;line-height:1;padding:0;cursor:pointer;border:none}
+  .chatPreviewItem button{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;background:var(--ink);color:#fff;font-size:11px;line-height:1;padding:0;cursor:pointer;border:none}  /* Calendar drag & drop */
+  .cal-task[draggable="true"]{cursor:grab}
+  .cal-task[draggable="true"]:active{cursor:grabbing}
+  .cal-task.cal-dragging{opacity:.4;transform:scale(0.95)}
+  .cal-day.cal-drop-target{border-color:var(--accent);border-width:2px;background:#fef8f5}
