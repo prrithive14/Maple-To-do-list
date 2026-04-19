@@ -44,7 +44,8 @@
 </header>
 
 <nav class="tabs">
-  <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span></button>
+  <!-- NEW: #reviewAlertDot sits next to the existing #taskAlertDot. Blue (#3b82f6) vs. red for overdue. -->
+  <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span><span class="alert-dot" id="reviewAlertDot" style="background:#3b82f6" title=""></span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
   <button class="tab" data-tab="archive" onclick="switchTab('archive')">📦 Archive <span class="count" id="countArchive">0</span></button>
@@ -73,6 +74,15 @@
         <option value="">All assignees</option><option>Prrithive</option><option>Sridharan</option><option>Both</option>
       </select>
       <select class="filter-select" id="filterCompany" onchange="renderTaskView()"><option value="">All companies</option></select>
+      <!-- NEW: review filter dropdown -->
+      <select class="filter-select" id="filterReview" onchange="renderTaskView()">
+        <option value="">All reviews</option>
+        <option value="awaiting_me">Awaiting my action</option>
+        <option value="awaiting_other">Awaiting others</option>
+        <option value="changes_requested">Changes requested</option>
+        <option value="approved">Approved</option>
+        <option value="no_review">No review</option>
+      </select>
       <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add task</button>
     </div>
     <div class="kanban" id="kanban"></div>
@@ -171,6 +181,8 @@
         <input type="file" id="taskFileUploadInput" multiple style="display:none" onchange="handleTaskFileUpload(this.files)">
         <div class="file-upload-progress" id="taskFileProgress">Uploading...</div>
       </div>
+      <!-- NEW: review section. Rendered by renderReviewSection() when modal opens for an existing task. Hidden for new (unsaved) tasks. -->
+      <div id="reviewSection" style="display:none"></div>
     </div>
     <div class="modal-footer">
       <div style="display:flex;gap:8px">
