@@ -162,7 +162,7 @@ function openTaskModal(id, defaultStatus) {
   state.editingTask = id ? state.tasks.find(t=>t.id===id) : null;
   const t = state.editingTask || {
     id: newId('TSK'), name:'', status: defaultStatus||'Not started', priority:'Medium',
-    date:'', duration:'', assignee:'Son', category:'', companyId: state.taskForCompany||'',
+    date:'', duration:'', assignee:'Prrithive', category:'', companyId: state.taskForCompany||'',
     notes:'', links:'', createdAt: nowIso()
   };
   if(!id) { t.category = (state.taskForCompany || t.companyId) ? 'Sales' : 'Personal'; }
@@ -173,13 +173,15 @@ function openTaskModal(id, defaultStatus) {
   document.getElementById('tPriority').value = t.priority||'Medium';
   document.getElementById('tDate').value = t.date||'';
   document.getElementById('tDuration').value = t.duration||'';
-  document.getElementById('tAssignee').value = t.assignee||'Son';
+  document.getElementById('tAssignee').value = t.assignee||'Prrithive';
   document.getElementById('tCategory').value = t.category||'';
   document.getElementById('tCompany').value = t.companyId||'';
   document.getElementById('tNotes').value = t.notes||'';
   document.getElementById('tLinks').value = t.links||'';
   document.getElementById('tDelete').style.display = id ? 'inline-flex' : 'none';
   document.getElementById('tArchive').style.display = id ? 'inline-flex' : 'none';
+  document.getElementById('taskFileSection').style.display = id ? 'block' : 'none';
+  if (id) renderTaskFiles(id);
   if(!id) state.editingTask = t;
   document.getElementById('taskModal').classList.add('open');
   setTimeout(()=>document.getElementById('tName').focus(), 50);
