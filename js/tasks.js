@@ -98,11 +98,11 @@ function renderCalendar() {
     const isToday = d.getTime() === today.getTime();
     const isPast = d < today;
     const dayTasks = filtered.filter(t => t.date === dateStr);
-    html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" onclick="openTaskModalForDate('${dateStr}', event)">
+    html += `<div class="cal-day${isToday?' today':''}${isPast?' past':''}" ondragover="onCalDragOver(event)" ondragleave="onCalDragLeave(event)" ondrop="onCalDrop(event,'${dateStr}')" onclick="openTaskModalForDate('${dateStr}', event)">
       <div class="cal-day-header"><span>${days[i]}</span><span class="cal-day-num">${d.getDate()}</span></div>
       <div class="cal-day-tasks">${dayTasks.map(t => {
         const cc = categoryClass(t.category); const isDone = t.status === 'Done';
-        return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">${esc(t.name)}</div>`;
+        return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">${esc(t.name)}</div>`;
       }).join('') || ''}</div></div>`;
   }
   grid.innerHTML = html;
@@ -111,8 +111,44 @@ function renderCalendar() {
   if(!unsched) { unsched = document.createElement('div'); unsched.id = 'calUnscheduled'; document.getElementById('calendarView').appendChild(unsched); }
   unsched.innerHTML = noDate.length > 0 ? `<div class="cal-unscheduled"><div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div><div class="cal-day-tasks">${noDate.map(t => {
     const cc = categoryClass(t.category);
-    return `<div class="cal-task cal-task-cat-${cc}" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
+    return `<div class="cal-task cal-task-cat-${cc}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
   }).join('')}</div></div>` : '';
+}
+
+// ===== CALENDAR DRAG & DROP =====
+function onCalDragStart(e, taskId) {
+  e.stopPropagation();
+  e.dataTransfer.setData('text/plain', taskId);
+  e.dataTransfer.effectAllowed = 'move';
+  e.target.classList.add('cal-dragging');
+}
+
+function onCalDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const day = e.target.closest('.cal-day');
+  if (day) day.classList.add('cal-drop-target');
+}
+
+function onCalDragLeave(e) {
+  const day = e.target.closest('.cal-day');
+  if (day) day.classList.remove('cal-drop-target');
+}
+
+async function onCalDrop(e, dateStr) {
+  e.preventDefault();
+  e.stopPropagation();
+  document.querySelectorAll('.cal-drop-target').forEach(function(d) { d.classList.remove('cal-drop-target'); });
+  document.querySelectorAll('.cal-dragging').forEach(function(d) { d.classList.remove('cal-dragging'); });
+  const taskId = e.dataTransfer.getData('text/plain');
+  if (!taskId) return;
+  const t = state.tasks.find(function(x) { return x.id === taskId; });
+  if (!t || t.date === dateStr) return;
+  t.date = dateStr;
+  t.updatedAt = nowIso();
+  renderCalendar();
+  try { await upsertRow(SHEET_TABS.tasks, TASK_COLS, t); toast('Moved to ' + formatDate(dateStr)); cacheLocal(); }
+  catch(err) { toast('Save failed', true); }
 }
 
 function openTaskModalForDate(dateStr, event) {
