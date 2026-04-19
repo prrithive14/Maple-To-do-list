@@ -51,9 +51,16 @@ function openCompanyModal(id) {
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
   const c = state.editingCompany || { id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'', website:'', linkedin:'', status:'Prospect', value:'', owner:'Prrithive', lastInteraction:'', notes:'', createdAt: nowIso() };
   document.getElementById('companyModalTitle').textContent = id ? 'Edit company' : 'New company';
-  ['Name','Industry','Size','Makes','Address','Contact','Phone','Email','Website','LinkedIn','Status','Value','Owner','Last','Notes'].forEach(k => {
-    const map = {Last:'lastInteraction'}; const key = map[k] || k.charAt(0).toLowerCase()+k.slice(1);
-    const el = document.getElementById('c'+k); if(el) el.value = c[key]||'';
+  // Map of DOM-id-suffix → state key. Explicit map avoids the LinkedIn/linkedin casing drift bug.
+  const fieldMap = {
+    Name: 'name', Industry: 'industry', Size: 'size', Makes: 'makes', Address: 'address',
+    Contact: 'contact', Phone: 'phone', Email: 'email', Website: 'website',
+    LinkedIn: 'linkedin', Status: 'status', Value: 'value', Owner: 'owner',
+    Last: 'lastInteraction', Notes: 'notes'
+  };
+  Object.keys(fieldMap).forEach(suffix => {
+    const el = document.getElementById('c' + suffix);
+    if (el) el.value = c[fieldMap[suffix]] || '';
   });
   document.getElementById('cDelete').style.display = id ? 'inline-flex' : 'none';
   document.getElementById('visitSection').style.display = id ? 'block' : 'none';
@@ -86,10 +93,64 @@ async function saveCompany() {
 
 async function deleteCompany() {
   const c = state.editingCompany;
-  if(!c || !confirm(`Delete ${c.name}? Linked tasks/visits will remain but be unlinked.`)) return;
-  state.companies = state.companies.filter(x=>x.id!==c.id);
-  refreshAll(); closeCompanyModal();
-  try { await deleteRowById(SHEET_TABS.companies, c.id); toast('Deleted'); } catch(e) { toast('Delete failed remotely', true); }
+  if (!c) return;
+
+  // Count linked items for an honest confirmation prompt
+  const linkedTasks = state.tasks.filter(t => t.companyId === c.id);
+  const linkedVisits = state.visits.filter(v => v.companyId === c.id);
+  const linkedPrep = state.visitPreps.filter(p => p.companyId === c.id);
+
+  let msg = `Delete ${c.name}?`;
+  const effects = [];
+  if (linkedTasks.length) effects.push(`Archive ${linkedTasks.length} linked task${linkedTasks.length !== 1 ? 's' : ''} (recoverable from Archive tab)`);
+  if (linkedVisits.length) effects.push(`Permanently delete ${linkedVisits.length} visit${linkedVisits.length !== 1 ? 's' : ''}`);
+  if (linkedPrep.length) effects.push(`Permanently delete visit prep data`);
+  if (effects.length) {
+    msg += '\n\nThis will also:\n• ' + effects.join('\n• ');
+  }
+  if (!confirm(msg)) return;
+
+  closeCompanyModal();
+
+  // Archive linked tasks (recoverable)
+  let taskErrors = 0;
+  for (const t of linkedTasks) {
+    try { await archiveTask(t.id, 'company_deleted'); }
+    catch (e) { console.error('Cascade archive failed for task', t.id, e); taskErrors++; }
+  }
+
+  // Hard delete linked visits
+  let visitErrors = 0;
+  for (const v of linkedVisits) {
+    try {
+      state.visits = state.visits.filter(x => x.id !== v.id);
+      await deleteRowById(SHEET_TABS.visits, v.id);
+    } catch (e) { console.error('Cascade delete failed for visit', v.id, e); visitErrors++; }
+  }
+
+  // Hard delete visit prep row(s) for this company
+  let prepErrors = 0;
+  for (const p of linkedPrep) {
+    try {
+      state.visitPreps = state.visitPreps.filter(x => x.id !== p.id);
+      await deleteRowById(SHEET_TABS.visitprep, p.id);
+    } catch (e) { console.error('Cascade delete failed for visit prep', p.id, e); prepErrors++; }
+  }
+
+  // Delete the company itself
+  state.companies = state.companies.filter(x => x.id !== c.id);
+  try { await deleteRowById(SHEET_TABS.companies, c.id); }
+  catch (e) { toast('Company delete failed remotely', true); console.error(e); }
+
+  refreshAll();
+  cacheLocal();
+
+  const totalErrors = taskErrors + visitErrors + prepErrors;
+  if (totalErrors === 0) {
+    toast(`Deleted ${c.name} and all linked data`);
+  } else {
+    toast(`Deleted ${c.name} — ${totalErrors} linked item${totalErrors !== 1 ? 's' : ''} failed to sync`, true);
+  }
 }
 
 function openTaskModalForCompany() { if(!state.editingCompany) return; state.taskForCompany = state.editingCompany.id; closeCompanyModal(); openTaskModal(); }
