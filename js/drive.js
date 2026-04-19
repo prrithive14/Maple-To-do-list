@@ -165,3 +165,110 @@ function handleTaskFileDrop(event) {
   var files = event.dataTransfer ? event.dataTransfer.files : null;
   if (files && files.length > 0) handleTaskFileUpload(files);
 }
+
+// ===== VISIT PREP FILE ATTACHMENTS =====
+async function getVisitPrepFolder(companyName) {
+  const rootId = await getMapleRootFolder();
+  const vpRoot = await findOrCreateFolder('Visit Prep', rootId);
+  const companyFolder = await findOrCreateFolder(companyName, vpRoot);
+  return companyFolder;
+}
+
+async function getVisitPrepItemFolder(companyName, itemName) {
+  const companyFolder = await getVisitPrepFolder(companyName);
+  return await findOrCreateFolder(itemName, companyFolder);
+}
+
+async function renderVPItemFiles(companyName, partIdx, itemIdx, containerId) {
+  var grid = document.getElementById(containerId);
+  if (!grid) return;
+  if (!accessToken) { grid.innerHTML = ''; return; }
+  var itemName = VISIT_PREP_PARTS[partIdx].items[itemIdx].substring(0, 50);
+  grid.innerHTML = '<span style="font-size:11px;color:var(--ink-mute);font-style:italic">Loading...</span>';
+  try {
+    var folderId = await getVisitPrepItemFolder(companyName, itemName);
+    var files = await listFilesInFolder(folderId);
+    if (files.length === 0) { grid.innerHTML = ''; return; }
+    grid.innerHTML = files.map(function(f) {
+      var icon = fileIcon(f.mimeType);
+      return '<a href="' + f.webViewLink + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);font-size:11px;text-decoration:none;color:var(--ink);margin:2px" title="' + esc(f.name) + '">' + icon + ' ' + esc(f.name.length > 20 ? f.name.substring(0,18) + '…' : f.name) + '</a>';
+    }).join('');
+  } catch(e) {
+    console.error('VP files error', e);
+    grid.innerHTML = '';
+  }
+}
+
+async function handleVPItemFileUpload(companyName, partIdx, itemIdx, fileInput) {
+  var files = Array.from(fileInput.files || []);
+  if (files.length === 0) return;
+  if (!accessToken) { toast('Sign in first', true); return; }
+  var itemName = VISIT_PREP_PARTS[partIdx].items[itemIdx].substring(0, 50);
+  try {
+    var folderId = await getVisitPrepItemFolder(companyName, itemName);
+    for (var i = 0; i < files.length; i++) {
+      await uploadFileToDrive(files[i], folderId);
+    }
+    toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached');
+    var containerId = 'vpFiles-' + partIdx + '-' + itemIdx;
+    await renderVPItemFiles(companyName, partIdx, itemIdx, containerId);
+  } catch(e) {
+    toast('Upload failed: ' + e.message, true);
+  }
+  fileInput.value = '';
+}
+
+// ===== VISIT PREP FILE ATTACHMENTS =====
+async function getVisitPrepFolder(companyName) {
+  const rootId = await getMapleRootFolder();
+  const vpRoot = await findOrCreateFolder('Visit Prep', rootId);
+  const companyFolder = await findOrCreateFolder(companyName, vpRoot);
+  return companyFolder;
+}
+
+async function getVisitPrepItemFolder(companyName, itemName) {
+  const companyFolder = await getVisitPrepFolder(companyName);
+  return await findOrCreateFolder(itemName, companyFolder);
+}
+
+async function renderVPItemFiles(companyName, itemKey, containerId) {
+  var grid = document.getElementById(containerId);
+  if (!grid) return;
+  if (!accessToken) { grid.innerHTML = '<div class="empty-mini" style="font-size:11px">Sign in to see files</div>'; return; }
+  grid.innerHTML = '<div class="empty-mini" style="font-size:11px;font-style:italic">Loading...</div>';
+  try {
+    var itemName = itemKey.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 50);
+    var folderId = await getVisitPrepItemFolder(companyName, itemName);
+    var files = await listFilesInFolder(folderId);
+    if (files.length === 0) {
+      grid.innerHTML = '';
+      return;
+    }
+    grid.innerHTML = files.map(function(f) {
+      var icon = fileIcon(f.mimeType);
+      return '<a href="' + f.webViewLink + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg-sunken);border:1px solid var(--line);border-radius:var(--radius);font-size:11px;text-decoration:none;color:var(--ink);margin:2px">' + icon + ' ' + esc(f.name) + '</a>';
+    }).join('');
+  } catch (e) {
+    console.error('VP file load error', e);
+    grid.innerHTML = '';
+  }
+}
+
+async function handleVPItemFileUpload(fileList, companyName, itemKey, containerId) {
+  var files = Array.from(fileList || []);
+  if (files.length === 0) return;
+  if (!accessToken) { toast('Sign in first', true); return; }
+  try {
+    var itemName = itemKey.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 50);
+    var folderId = await getVisitPrepItemFolder(companyName, itemName);
+    for (var i = 0; i < files.length; i++) {
+      toast('Uploading ' + (i + 1) + '/' + files.length + '...');
+      await uploadFileToDrive(files[i], folderId);
+    }
+    toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' uploaded');
+    await renderVPItemFiles(companyName, itemKey, containerId);
+  } catch (e) {
+    console.error('VP upload error', e);
+    toast('Upload failed: ' + e.message, true);
+  }
+}
