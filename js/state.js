@@ -5,6 +5,9 @@ let state = {
   view: 'table', taskScope: 'all', taskView: 'kanban', currentTab: 'tasks',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
+  // Identity — populated by auth.js after successful sign-in via fetchUserEmail()
+  currentEmail: '',      // raw OAuth email, e.g. "prrithive14@gmail.com"
+  currentUser: 'Unknown' // role name from USER_EMAILS map, or "Unknown"
 };
 
 let cfg = { ...APP_CONFIG };
@@ -27,6 +30,25 @@ function tabKeyForName(tab) {
   if(tab===SHEET_TABS.visits) return 'visits';
   if(tab===SHEET_TABS.deleted) return 'deleted';
   if(tab===SHEET_TABS.visitprep) return 'visitPreps';
+}
+
+// ===== USER IDENTITY =====
+// Returns the role name of the signed-in user: "Prrithive" | "Sridharan" | "Unknown"
+function getCurrentUser() {
+  return state.currentUser || 'Unknown';
+}
+
+// Returns true if current user can take review actions (anyone recognized can).
+// Unknown users get read-only access — they can see tasks but not approve/request review.
+function canUserReview() {
+  return state.currentUser === 'Prrithive' || state.currentUser === 'Sridharan';
+}
+
+// Returns the "other" user for review purposes. Used as default reviewer.
+function otherUser() {
+  if (state.currentUser === 'Prrithive') return 'Sridharan';
+  if (state.currentUser === 'Sridharan') return 'Prrithive';
+  return '';
 }
 
 function categoryClass(cat) {
