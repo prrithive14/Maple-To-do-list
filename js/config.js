@@ -7,12 +7,14 @@ const APP_CONFIG = {
 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive';
 
-const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted' };
+const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep' };
 
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt'];
 const DELETED_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','archivedAt','archiveReason'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
+
+const VISITPREP_COLS = ['companyId','checks','notes','leadRating','updatedAt'];
 
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
 const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
