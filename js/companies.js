@@ -13,7 +13,33 @@ function setCompanyView(v) {
 }
 
 // ===== HELPERS =====
-// A task is "active" if it's In progress or Not started (matches agreed priority logic)
+// Normalize a website URL so the browser opens it correctly.
+// If there's no protocol, prepend https://. If blank, return null.
+function normalizeWebsiteUrl(raw) {
+  if (!raw) return null;
+  var s = String(raw).trim();
+  if (!s) return null;
+  // Already has a protocol (http, https, ftp, etc.)
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  // Looks like a bare domain or path — prepend https://
+  return 'https://' + s;
+}
+
+// Returns HTML for a small globe icon link, or '' if no website.
+// Uses event.stopPropagation to avoid triggering the parent row/card click.
+function companyWebsiteLinkHtml(companyObj) {
+  var url = normalizeWebsiteUrl(companyObj.website);
+  if (!url) return '';
+  // Tooltip shows the URL so user knows where it goes before clicking
+  var safeUrl = esc(url);
+  return '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" ' +
+    'onclick="event.stopPropagation()" ' +
+    'title="Open ' + safeUrl + '" ' +
+    'style="text-decoration:none;color:var(--accent);margin-left:6px;font-size:13px;cursor:pointer" ' +
+    'aria-label="Open website in new tab">\ud83c\udf10</a>';
+}
+
+// A task is "active" if it's In progress or Not started
 function coGetActiveTasksForCompany(companyId) {
   return state.tasks.filter(function(t){
     return t.companyId === companyId && (t.status === 'In progress' || t.status === 'Not started');
@@ -26,7 +52,6 @@ function coGetOverdueCountForCompany(companyId) {
   return active.filter(function(t){ return t.date && new Date(t.date) < today; }).length;
 }
 
-// Returns the soonest (ascending) due date among active tasks, or null
 function coGetNearestDueForCompany(companyId) {
   var active = coGetActiveTasksForCompany(companyId);
   var withDates = active.filter(function(t){ return t.date; }).map(function(t){ return t.date; });
@@ -35,14 +60,11 @@ function coGetNearestDueForCompany(companyId) {
   return withDates[0];
 }
 
-// Gets the visit date from VisitPrep for this company (or null)
 function coGetVisitDate(companyId) {
   var vp = state.visitPreps.find(function(v){ return v.companyId === companyId; });
   return vp && vp.visitDate ? vp.visitDate : null;
 }
 
-// Formats "Next visit" for display. Returns { text, colorVar }.
-// colorVar is a CSS var name so table + card views can style consistently.
 function coFormatNextVisit(companyId) {
   var vd = coGetVisitDate(companyId);
   if (!vd) return { text: '—', color: 'var(--ink-mute)' };
@@ -54,28 +76,22 @@ function coFormatNextVisit(companyId) {
   return { text: formatDate(vd) + ' (' + Math.abs(daysUntil) + 'd ago)', color: 'var(--red)' };
 }
 
-// Priority score for a company. Higher = more urgent.
-// Tier 1: has active tasks. Tier 2: no active tasks (falls back to visit prep priority).
-// We use numeric score bands so tiers never overlap.
+// Priority score — Tier 1 (has active tasks) vs Tier 2 (no active tasks, falls back to VisitPrep)
 function coPriorityScore(companyId) {
   var active = coGetActiveTasksForCompany(companyId);
 
   if (active.length > 0) {
-    // Tier 1 base: 10000. Add heavy weight for overdue count, then nearness of due date.
     var overdueCount = coGetOverdueCountForCompany(companyId);
     var nearest = coGetNearestDueForCompany(companyId);
     var nearnessBoost = 0;
     if (nearest) {
       var today = new Date(new Date().toDateString());
       var days = Math.round((new Date(nearest) - today) / 86400000);
-      // Sooner due date = higher boost. Cap at ±90 so nearness never overwhelms overdue count.
       if (days <= 0) nearnessBoost = 90;
-      else if (days <= 7) nearnessBoost = 70 - days * 2;  // 1d=68, 7d=56
-      else if (days <= 30) nearnessBoost = 40 - days;      // 8d=32, 30d=10
+      else if (days <= 7) nearnessBoost = 70 - days * 2;
+      else if (days <= 30) nearnessBoost = 40 - days;
       else nearnessBoost = 5;
     }
-    // overdueCount * 500 dominates nearnessBoost (max 90), so overdue count is the clear primary
-    // active.length * 5 as a weak bonus — more active tasks = slightly higher within same overdue bucket
     var score = 10000 + overdueCount * 500 + nearnessBoost + active.length * 5;
     return {
       score: score,
@@ -87,14 +103,10 @@ function coPriorityScore(companyId) {
     };
   }
 
-  // Tier 2: no active tasks. Fall back to Visit Prep priority.
-  // vpPriorityScore lives in visitprep.js — same global scope, always loaded before/with this file.
   if (typeof vpPriorityScore === 'function') {
     var vp = vpPriorityScore(companyId);
-    // Tier 2 ceiling is well below Tier 1 base (10000). vp.score maxes around 1050.
     return { score: vp.score, reason: vp.reason };
   }
-  // Defensive fallback if visitprep.js isn't loaded for any reason
   return { score: 0, reason: { icon: '\u2022', label: '' } };
 }
 
@@ -117,7 +129,6 @@ function coFilterAndSortCompanies() {
     return true;
   });
 
-  // Attach metadata used for sorting/display
   var enriched = filtered.map(function(c){
     var p = coPriorityScore(c.id);
     return {
@@ -131,35 +142,31 @@ function coFilterAndSortCompanies() {
     };
   });
 
-  // Sort based on selected mode
   if (coSortMode === 'priority') {
     enriched.sort(function(a, b){
       if (b.score !== a.score) return b.score - a.score;
       return (a.company.name || '').localeCompare(b.company.name || '');
     });
   } else if (coSortMode === 'tasks') {
-    // Overdue count desc, then active count desc, then alpha
     enriched.sort(function(a, b){
       if (b.overdueCount !== a.overdueCount) return b.overdueCount - a.overdueCount;
       if (b.activeCount !== a.activeCount) return b.activeCount - a.activeCount;
       return (a.company.name || '').localeCompare(b.company.name || '');
     });
   } else if (coSortMode === 'visit') {
-    // Ascending: today/future first (soonest), then past (most recent first), then no date
     var today = new Date(new Date().toDateString());
     enriched.sort(function(a, b){
       var da = a.visitDate, db = b.visitDate;
       if (!da && !db) return (a.company.name || '').localeCompare(b.company.name || '');
-      if (!da) return 1;   // no-date goes last
+      if (!da) return 1;
       if (!db) return -1;
       var dA = new Date(da), dB = new Date(db);
       var aPast = dA < today, bPast = dB < today;
-      if (aPast !== bPast) return aPast ? 1 : -1;  // future/today before past
-      if (!aPast) return dA - dB;                    // both future/today: soonest first
-      return dB - dA;                                 // both past: most recent first
+      if (aPast !== bPast) return aPast ? 1 : -1;
+      if (!aPast) return dA - dB;
+      return dB - dA;
     });
   } else {
-    // 'alpha'
     enriched.sort(function(a, b){ return (a.company.name || '').localeCompare(b.company.name || ''); });
   }
 
@@ -176,9 +183,6 @@ function renderCompanies() {
   var root = document.getElementById('companiesContainer');
   if (!root) return;
 
-  // Controls bar: sort dropdown + active tasks filter. We inject these inline because they
-  // aren't in index.html — this keeps the change to a single file.
-  // If the elements already exist (from a previous render), we read their values before re-rendering.
   var controlsHtml = '<div class="filters" style="margin-bottom:12px;gap:8px;display:flex;flex-wrap:wrap;align-items:center">';
   controlsHtml += '<label style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Sort:</label>';
   controlsHtml += '<select class="filter-select" id="companySortSelect" onchange="coUpdateSort(this.value)">';
@@ -199,12 +203,10 @@ function renderCompanies() {
   var ranked = coFilterAndSortCompanies();
 
   if (ranked.length === 0) {
-    // Empty state still shows the controls so user can change filters
     root.innerHTML = controlsHtml + '<div class="empty"><h3>No companies match</h3><p>Try clearing filters or searching for something else.</p></div>';
     return;
   }
 
-  // Pagination math
   var totalPages = Math.max(1, Math.ceil(ranked.length / CO_PAGE_SIZE));
   if (coCurrentPage > totalPages) coCurrentPage = totalPages;
   if (coCurrentPage < 1) coCurrentPage = 1;
@@ -212,7 +214,6 @@ function renderCompanies() {
   var endIdx = Math.min(startIdx + CO_PAGE_SIZE, ranked.length);
   var pageSlice = ranked.slice(startIdx, endIdx);
 
-  // Sort-mode description for the summary line
   var sortLabel = coSortMode === 'priority' ? 'priority'
     : coSortMode === 'tasks' ? 'task activity'
     : coSortMode === 'visit' ? 'visit date'
@@ -231,8 +232,10 @@ function renderCompanies() {
       var nv = coFormatNextVisit(c.id);
       var lastVisit = state.visits.filter(function(v){ return v.companyId === c.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); })[0];
       var taskCount = state.tasks.filter(function(t){ return t.companyId === c.id; }).length;
+      var webLink = companyWebsiteLinkHtml(c);
       var html = '<div class="company-card" onclick="openCompanyModal(\'' + c.id + '\')">';
-      html += '<div class="company-card-name">' + esc(c.name) + '</div>';
+      // Name with inline website globe icon
+      html += '<div class="company-card-name" style="display:flex;align-items:center;flex-wrap:wrap">' + esc(c.name) + webLink + '</div>';
       html += '<div class="company-card-industry">' + esc(c.industry || '—') + (c.size ? ' \u00b7 ' + esc(c.size) : '') + '</div>';
       html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0">';
       html += '<span class="status-pill status-' + (c.status || 'Prospect') + '">' + (c.status || 'Prospect') + '</span>';
@@ -244,7 +247,6 @@ function renderCompanies() {
         html += '</span>';
       }
       html += '</div>';
-      // Priority reason (why is this here?)
       if (reason && reason.label) {
         html += '<div style="font-size:11px;color:var(--ink-soft);margin:4px 0;font-weight:500">' + reason.icon + ' ' + esc(reason.label) + '</div>';
       }
@@ -261,6 +263,7 @@ function renderCompanies() {
       var c = entry.company;
       var reason = entry.reason;
       var nv = coFormatNextVisit(c.id);
+      var webLink = companyWebsiteLinkHtml(c);
       var taskCellHtml;
       if (entry.activeCount > 0) {
         var color = entry.overdueCount > 0 ? 'var(--red)' : 'var(--accent)';
@@ -274,7 +277,8 @@ function renderCompanies() {
         ? '<span style="font-size:11px;color:var(--ink-soft)">' + reason.icon + ' ' + esc(reason.label) + '</span>'
         : '<span style="color:var(--ink-mute)">—</span>';
       var row = '<tr onclick="openCompanyModal(\'' + c.id + '\')">';
-      row += '<td><div class="company-name-cell">' + esc(c.name) + '</div><div class="company-industry">' + esc(c.industry || '') + '</div></td>';
+      // Name cell with inline website globe
+      row += '<td><div class="company-name-cell" style="display:flex;align-items:center">' + esc(c.name) + webLink + '</div><div class="company-industry">' + esc(c.industry || '') + '</div></td>';
       row += '<td><span class="status-pill status-' + (c.status || 'Prospect') + '">' + (c.status || 'Prospect') + '</span></td>';
       row += '<td>' + esc(c.contact || '—') + '</td>';
       row += '<td>' + esc(c.phone || '—') + '</td>';
@@ -288,7 +292,6 @@ function renderCompanies() {
     }).join('') + '</tbody></table></div>';
   }
 
-  // Pagination controls
   var paginationHtml = '';
   if (totalPages > 1) {
     paginationHtml = '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;padding:12px">';
@@ -313,7 +316,6 @@ function openCompanyModal(id) {
   state.editingCompany = id ? state.companies.find(c=>c.id===id) : null;
   const c = state.editingCompany || { id: newId('CO'), name:'', industry:'', size:'', makes:'', address:'', contact:'', phone:'', email:'', website:'', linkedin:'', status:'Prospect', value:'', owner:'Prrithive', lastInteraction:'', notes:'', createdAt: nowIso() };
   document.getElementById('companyModalTitle').textContent = id ? 'Edit company' : 'New company';
-  // Explicit map avoids the LinkedIn/linkedin casing drift bug.
   const fieldMap = {
     Name: 'name', Industry: 'industry', Size: 'size', Makes: 'makes', Address: 'address',
     Contact: 'contact', Phone: 'phone', Email: 'email', Website: 'website',
@@ -357,7 +359,6 @@ async function deleteCompany() {
   const c = state.editingCompany;
   if (!c) return;
 
-  // Count linked items for an honest confirmation prompt
   const linkedTasks = state.tasks.filter(t => t.companyId === c.id);
   const linkedVisits = state.visits.filter(v => v.companyId === c.id);
   const linkedPrep = state.visitPreps.filter(p => p.companyId === c.id);
@@ -374,14 +375,12 @@ async function deleteCompany() {
 
   closeCompanyModal();
 
-  // Archive linked tasks (recoverable)
   let taskErrors = 0;
   for (const t of linkedTasks) {
     try { await archiveTask(t.id, 'company_deleted'); }
     catch (e) { console.error('Cascade archive failed for task', t.id, e); taskErrors++; }
   }
 
-  // Hard delete linked visits
   let visitErrors = 0;
   for (const v of linkedVisits) {
     try {
@@ -390,7 +389,6 @@ async function deleteCompany() {
     } catch (e) { console.error('Cascade delete failed for visit', v.id, e); visitErrors++; }
   }
 
-  // Hard delete visit prep row(s) for this company
   let prepErrors = 0;
   for (const p of linkedPrep) {
     try {
@@ -399,7 +397,6 @@ async function deleteCompany() {
     } catch (e) { console.error('Cascade delete failed for visit prep', p.id, e); prepErrors++; }
   }
 
-  // Delete the company itself
   state.companies = state.companies.filter(x => x.id !== c.id);
   try { await deleteRowById(SHEET_TABS.companies, c.id); }
   catch (e) { toast('Company delete failed remotely', true); console.error(e); }
