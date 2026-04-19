@@ -65,8 +65,9 @@ async function ensureDeletedSheet() {
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'Deleted' } } }] })
   });
 
-  // Write headers
-  await sheetsWrite('Deleted!A1:O1', [DELETED_COLS]);
+  // Write headers — range is dynamic based on DELETED_COLS length
+  const endCol = colLetter(DELETED_COLS.length);
+  await sheetsWrite(`Deleted!A1:${endCol}1`, [DELETED_COLS]);
   console.log('Created Deleted sheet with headers');
 }
 
@@ -80,7 +81,10 @@ async function ensureVisitPrepSheet() {
     headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'VisitPrep' } } }] })
   });
-  await sheetsWrite('VisitPrep!A1:F1', [VISITPREP_COLS]);
+  // Write headers — range is dynamic based on VISITPREP_COLS length
+  const endCol = colLetter(VISITPREP_COLS.length);
+  await sheetsWrite(`VisitPrep!A1:${endCol}1`, [VISITPREP_COLS]);
+  console.log('Created VisitPrep sheet with headers');
 }
 
 async function pullAll() {
