@@ -83,3 +83,71 @@ async function handleFileUpload(fileList) {
 }
 
 function handleFileDrop(event) { const files = event.dataTransfer?.files; if(files && files.length > 0) handleFileUpload(files); }
+
+// ===== TASK FILE ATTACHMENTS =====
+async function getTaskFilesFolder() {
+  const rootId = await getMapleRootFolder();
+  return await findOrCreateFolder('Task Files', rootId);
+}
+
+async function getTaskFolder(taskId) {
+  const parentId = await getTaskFilesFolder();
+  return await findOrCreateFolder(taskId, parentId);
+}
+
+async function renderTaskFiles(taskId) {
+  const grid = document.getElementById('taskFiles'); if (!grid) return;
+  if (!accessToken) { grid.innerHTML = '<div class="empty-mini">Sign in to see files</div>'; return; }
+
+  // Check if task has any files by looking at links field
+  const t = state.tasks.find(function(x) { return x.id === taskId; });
+  if (!t) return;
+
+  grid.innerHTML = '<div class="empty-mini" style="font-style:italic">Loading files...</div>';
+  try {
+    const folderId = await getTaskFolder(taskId);
+    document.getElementById('taskFileDropZone').dataset.folderId = folderId;
+    document.getElementById('taskFileDropZone').dataset.taskId = taskId;
+    const files = await listFilesInFolder(folderId);
+    if (files.length === 0) {
+      grid.innerHTML = '<div class="empty-mini">No files attached — drop files above</div>';
+      return;
+    }
+    grid.innerHTML = files.map(function(f) {
+      const isImage = f.mimeType && f.mimeType.startsWith('image/');
+      const thumb = isImage && f.thumbnailLink ? '<img class="file-card-thumb" src="' + f.thumbnailLink + '" alt="">' : '<div class="file-card-icon">' + fileIcon(f.mimeType) + '</div>';
+      return '<a class="file-card" href="' + f.webViewLink + '" target="_blank" rel="noopener" title="Open in Google Drive">' + thumb + '<div class="file-card-name">' + esc(f.name) + '</div><div class="file-card-meta">' + formatFileSize(f.size) + '</div></a>';
+    }).join('');
+  } catch (e) {
+    console.error('Task files error', e);
+    grid.innerHTML = '<div class="empty-mini">Could not load files</div>';
+  }
+}
+
+async function handleTaskFileUpload(fileList) {
+  const files = Array.from(fileList || []); if (files.length === 0) return;
+  if (!accessToken) { toast('Sign in first', true); return; }
+  const taskId = document.getElementById('taskFileDropZone').dataset.taskId;
+  if (!taskId) { toast('No task selected', true); return; }
+  const progress = document.getElementById('taskFileProgress'); progress.classList.add('show');
+  try {
+    const folderId = document.getElementById('taskFileDropZone').dataset.folderId || await getTaskFolder(taskId);
+    for (var i = 0; i < files.length; i++) {
+      progress.textContent = 'Uploading ' + (i+1) + '/' + files.length + ': ' + files[i].name + '...';
+      await uploadFileToDrive(files[i], folderId);
+    }
+    toast(files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached');
+    await renderTaskFiles(taskId);
+  } catch (e) {
+    console.error('Task upload error', e);
+    toast('Upload failed: ' + e.message, true);
+  } finally {
+    progress.classList.remove('show');
+    document.getElementById('taskFileUploadInput').value = '';
+  }
+}
+
+function handleTaskFileDrop(event) {
+  var files = event.dataTransfer ? event.dataTransfer.files : null;
+  if (files && files.length > 0) handleTaskFileUpload(files);
+}
