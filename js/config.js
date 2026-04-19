@@ -19,6 +19,6 @@ const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 // User identity — maps OAuth email to role name. Used across the app for review workflow.
 // Any email not in this map is treated as "Unknown" and gets read-only access to reviews.
 const USER_EMAILS = {
-  'prrithive14@gmail.com': 'Prrithive',
+  'prrithive@gmail.com': 'Prrithive',
   'sridharanbalaiyan@gmail.com': 'Sridharan'
 };
