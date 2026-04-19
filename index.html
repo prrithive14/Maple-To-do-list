@@ -69,7 +69,7 @@
       <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderTaskView()">
       <select class="filter-select" id="filterCategory" onchange="renderTaskView()"><option value="">All categories</option></select>
       <select class="filter-select" id="filterAssignee" onchange="renderTaskView()">
-        <option value="">All assignees</option><option>Son</option><option>Dad</option><option>Both</option>
+        <option value="">All assignees</option><option>Prrithive</option><option>Sridharan</option><option>Both</option>
       </select>
       <select class="filter-select" id="filterCompany" onchange="renderTaskView()"><option value="">All companies</option></select>
       <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add task</button>
@@ -94,7 +94,7 @@
           <option value="">All statuses</option><option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option>
         </select>
         <select class="filter-select" id="filterCompanyOwner" onchange="renderCompanies()">
-          <option value="">All owners</option><option>Son</option><option>Dad</option><option>Both</option>
+          <option value="">All owners</option><option>Prrithive</option><option>Sridharan</option><option>Both</option>
         </select>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -145,7 +145,7 @@
         <div class="field"><label>Priority</label><select id="tPriority"><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></div>
         <div class="field"><label>Date</label><input id="tDate" type="date"></div>
         <div class="field"><label>Duration (hrs)</label><input id="tDuration" type="number" step="0.5" min="0"></div>
-        <div class="field"><label>Assignee</label><select id="tAssignee"><option>Son</option><option>Dad</option><option>Both</option></select></div>
+        <div class="field"><label>Assignee</label><select id="tAssignee"><option>Prrithive</option><option>Sridharan</option><option>Both</option></select></div>
         <div class="field"><label>Category</label>
           <input id="tCategory" list="categoryOptions" placeholder="Sales" autocomplete="off">
           <datalist id="categoryOptions">
@@ -156,6 +156,15 @@
         <div class="field form-row full"><label>Linked company (optional)</label><select id="tCompany"><option value="">— None —</option></select></div>
         <div class="field form-row full"><label>Notes</label><textarea id="tNotes" rows="3"></textarea></div>
         <div class="field form-row full"><label>Resources / links</label><input id="tLinks" placeholder="https://…"></div>
+      </div>
+      <div id="taskFileSection" style="display:none">
+        <div class="section-header">Attachments</div>
+        <div class="file-grid" id="taskFiles"></div>
+        <div class="file-upload-zone" id="taskFileDropZone" onclick="document.getElementById('taskFileUploadInput').click()" ondragover="event.preventDefault();this.classList.add('dragging')" ondragleave="this.classList.remove('dragging')" ondrop="event.preventDefault();this.classList.remove('dragging');handleTaskFileDrop(event)">
+          📁 Click or drag files to attach<br><span style="font-size:11px">PDFs, images, documents</span>
+        </div>
+        <input type="file" id="taskFileUploadInput" multiple style="display:none" onchange="handleTaskFileUpload(this.files)">
+        <div class="file-upload-progress" id="taskFileProgress">Uploading...</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -188,7 +197,7 @@
         <div class="field form-row full"><label>LinkedIn URL</label><input id="cLinkedIn" placeholder="https://linkedin.com/company/..."></div>
         <div class="field"><label>Status</label><select id="cStatus"><option>Prospect</option><option>Visited</option><option>Quoted</option><option>Won</option><option>Lost</option></select></div>
         <div class="field"><label>Pipeline value (CAD)</label><input id="cValue" type="number" min="0" step="100"></div>
-        <div class="field"><label>Owner</label><select id="cOwner"><option>Son</option><option>Dad</option><option>Both</option></select></div>
+        <div class="field"><label>Owner</label><select id="cOwner"><option>Prrithive</option><option>Sridharan</option><option>Both</option></select></div>
         <div class="field"><label>Last interaction</label><input id="cLast" type="date"></div>
         <div class="field form-row full"><label>Notes</label><textarea id="cNotes" rows="3"></textarea></div>
       </div>
@@ -228,7 +237,7 @@
         <div class="field form-row full"><label>Outcome</label><select id="vOutcome"><option>Positive</option><option>Neutral</option><option>No interest</option><option>Follow-up needed</option><option>Quoted</option></select></div>
         <div class="field form-row full"><label>Notes</label><textarea id="vNotes" rows="4" placeholder="What was discussed, who was met, key takeaways…"></textarea></div>
         <div class="field form-row full"><label>Next step</label><input id="vNext" placeholder="Send quote by Friday"></div>
-        <div class="field form-row full"><label>Logged by</label><select id="vBy"><option>Son</option><option>Dad</option></select></div>
+        <div class="field form-row full"><label>Logged by</label><select id="vBy"><option>Prrithive</option><option>Sridharan</option></select></div>
       </div>
     </div>
     <div class="modal-footer">
