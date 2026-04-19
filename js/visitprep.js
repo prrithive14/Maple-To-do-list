@@ -1,4 +1,4 @@
-/* visitprep.js — Visit Prep with search, filters, visit date, per-item notes/files, PDF */
+/* visitprep.js — Visit Prep with priority scoring, search, filters, pagination, per-item notes/files, PDF */
 
 var VISIT_PREP_PARTS = [
   { title: "Company Research & Strategy", icon: "\ud83d\udd0d", color: "#6366F1",
@@ -10,8 +10,13 @@ var VISIT_PREP_PARTS = [
 ];
 var VP_TOTAL = VISIT_PREP_PARTS.reduce(function(s,p){return s+p.items.length;},0);
 var VP_LEADS = [{label:"Hot",emoji:"\ud83d\udd25",color:"#F87171"},{label:"Warm",emoji:"\ud83c\udf24",color:"#FBBF24"},{label:"Cold",emoji:"\u2744\ufe0f",color:"#60A5FA"}];
+
+// Pagination config
+var VP_PAGE_SIZE = 15;
+
 var vpActiveId = null, vpExpanded = null;
 var vpSearchText = '', vpFilterLead = '', vpFilterProgress = '';
+var vpCurrentPage = 1;
 
 function getVP(cid){return state.visitPreps.find(function(v){return v.companyId===cid;});}
 function getVPChecks(cid){var v=getVP(cid);if(!v||!v.checks)return[];try{return JSON.parse(v.checks);}catch(e){return[];}}
@@ -43,28 +48,91 @@ function vpExpand(pi,ii){var k=pi+'-'+ii;vpExpanded=(vpExpanded===k)?null:k;vpRe
 function vpFileBtn(pi,ii){var inp=document.getElementById('vpFI-'+pi+'-'+ii);if(inp)inp.click();}
 async function vpFileUpload(pi,ii,inp){if(!vpActiveId)return;var co=state.companies.find(function(c){return c.id===vpActiveId;});if(!co)return;await handleVPItemFileUpload(inp.files,co.name,VISIT_PREP_PARTS[pi].items[ii],'vpF-'+pi+'-'+ii);inp.value='';}
 
-function vpUpdateSearch(){var el=document.getElementById('vpSearch');vpSearchText=el?el.value.toLowerCase():'';renderVisitPrep();}
-function vpUpdateFilterLead(val){vpFilterLead=val;renderVisitPrep();}
-function vpUpdateFilterProgress(val){vpFilterProgress=val;renderVisitPrep();}
+// ===== PRIORITY SCORING =====
+// Higher score = higher priority = higher in list.
+// Visit date buckets dominate (100+ point gaps). Lead rating is a +/-50 tiebreaker within a bucket.
+function vpPriorityScore(companyId) {
+  var prog = vpProg(companyId);
+  var vd = getVPVisitDate(companyId);
+  var lead = getVPLead(companyId);
+
+  // Normalize today to midnight for consistent day math
+  var today = new Date(new Date().toDateString());
+  var daysUntil = null;
+  if (vd) {
+    var visit = new Date(vd);
+    daysUntil = Math.round((visit - today) / 86400000);
+  }
+
+  // Visit date bucket scoring
+  var dateScore, reason;
+  if (daysUntil === null) {
+    dateScore = 200; reason = { icon: '\ud83c\udd95', label: 'Needs scheduling' };
+  } else if (daysUntil === 0) {
+    dateScore = 1000; reason = { icon: '\ud83d\udcc5', label: 'Visit today' };
+  } else if (daysUntil >= 1 && daysUntil <= 3) {
+    dateScore = 900; reason = { icon: '\u26a1', label: 'Visit in ' + daysUntil + ' day' + (daysUntil !== 1 ? 's' : '') };
+  } else if (daysUntil < 0 && prog < 100) {
+    dateScore = 850; reason = { icon: '\u26a0', label: 'Prep overdue' };
+  } else if (daysUntil >= 4 && daysUntil <= 7) {
+    dateScore = 700; reason = { icon: '\ud83d\udcc5', label: 'This week' };
+  } else if (daysUntil >= 8 && daysUntil <= 14) {
+    dateScore = 500; reason = { icon: '\ud83d\udcc6', label: 'Next week' };
+  } else if (daysUntil >= 15 && daysUntil <= 30) {
+    dateScore = 300; reason = { icon: '\ud83d\udcc6', label: 'Later this month' };
+  } else if (daysUntil > 30) {
+    dateScore = 100; reason = { icon: '\ud83d\udca4', label: 'Later' };
+  } else {
+    // daysUntil < 0 and prog === 100
+    dateScore = 10; reason = { icon: '\u2705', label: 'Completed' };
+  }
+
+  // Lead rating bonus (tiebreaker within a bucket — never large enough to outrank a bucket)
+  var leadBonus = 0;
+  if (lead === 'Hot') leadBonus = 50;
+  else if (lead === 'Warm') leadBonus = 25;
+  else if (lead === 'Cold') leadBonus = -10;
+
+  return { score: dateScore + leadBonus, reason: reason };
+}
+
+function vpUpdateSearch(){var el=document.getElementById('vpSearch');vpSearchText=el?el.value.toLowerCase():'';vpCurrentPage=1;renderVisitPrep();}
+function vpUpdateFilterLead(val){vpFilterLead=val;vpCurrentPage=1;renderVisitPrep();}
+function vpUpdateFilterProgress(val){vpFilterProgress=val;vpCurrentPage=1;renderVisitPrep();}
+function vpGoToPage(page){vpCurrentPage=page;renderVisitPrep();}
 
 function vpGetFilteredCompanies(){
   var cos=state.companies.slice();
-  // Filter by search
-  if(vpSearchText){cos=cos.filter(function(c){return(c.name||'').toLowerCase().indexOf(vpSearchText)!==-1||(c.contact||'').toLowerCase().indexOf(vpSearchText)!==-1||(c.industry||'').toLowerCase().indexOf(vpSearchText)!==-1;});}
+  // Filter by search — now also searches notes
+  if(vpSearchText){
+    cos = cos.filter(function(c){
+      var hay = ((c.name||'') + ' ' + (c.contact||'') + ' ' + (c.industry||'') + ' ' + (c.notes||'')).toLowerCase();
+      return hay.indexOf(vpSearchText) !== -1;
+    });
+  }
   // Filter by lead
-  if(vpFilterLead){cos=cos.filter(function(c){return getVPLead(c.id)===vpFilterLead;});}
+  if(vpFilterLead){
+    if (vpFilterLead === 'none') {
+      cos = cos.filter(function(c){ return !getVPLead(c.id); });
+    } else {
+      cos = cos.filter(function(c){ return getVPLead(c.id) === vpFilterLead; });
+    }
+  }
   // Filter by progress
   if(vpFilterProgress==='not-started'){cos=cos.filter(function(c){return vpProg(c.id)===0;});}
   else if(vpFilterProgress==='in-progress'){cos=cos.filter(function(c){var p=vpProg(c.id);return p>0&&p<100;});}
   else if(vpFilterProgress==='complete'){cos=cos.filter(function(c){return vpProg(c.id)===100;});}
-  // Sort: upcoming visit dates first, then no date
-  cos.sort(function(a,b){
-    var da=getVPVisitDate(a.id),db=getVPVisitDate(b.id);
-    if(da&&db)return da.localeCompare(db);
-    if(da)return -1;if(db)return 1;
-    return(a.name||'').localeCompare(b.name||'');
+
+  // Compute priority score for each, then sort: score desc, then alphabetical
+  cos = cos.map(function(c){
+    var p = vpPriorityScore(c.id);
+    return { company: c, score: p.score, reason: p.reason };
   });
-  return cos;
+  cos.sort(function(a, b){
+    if (b.score !== a.score) return b.score - a.score;
+    return (a.company.name || '').localeCompare(b.company.name || '');
+  });
+  return cos;  // array of {company, score, reason}
 }
 
 function renderVisitPrep(){
@@ -76,7 +144,7 @@ function renderVisitPrep(){
 
   // Search + Filters
   h+='<div class="filters" style="margin-bottom:16px">';
-  h+='<input class="search-input" id="vpSearch" placeholder="Search companies..." value="'+esc(vpSearchText)+'" oninput="vpUpdateSearch()">';
+  h+='<input class="search-input" id="vpSearch" placeholder="Search name, contact, industry, notes... (press /)" value="'+esc(vpSearchText)+'" oninput="vpUpdateSearch()">';
   h+='<select class="filter-select" onchange="vpUpdateFilterLead(this.value)">';
   h+='<option value=""'+(vpFilterLead===''?' selected':'')+'>All leads</option>';
   VP_LEADS.forEach(function(o){h+='<option value="'+o.label+'"'+(vpFilterLead===o.label?' selected':'')+'>'+o.emoji+' '+o.label+'</option>';});
@@ -89,20 +157,41 @@ function renderVisitPrep(){
   h+='<option value="complete"'+(vpFilterProgress==='complete'?' selected':'')+'>Complete</option>';
   h+='</select></div>';
 
-  var cos=vpGetFilteredCompanies();
-  if(cos.length===0){
+  var ranked = vpGetFilteredCompanies();
+  if(ranked.length===0){
     h+='<div class="empty-mini">No companies match your filters</div>';
-    root.innerHTML=h;return;
+    root.innerHTML=h;
+    return;
   }
 
+  // Pagination math
+  var totalPages = Math.max(1, Math.ceil(ranked.length / VP_PAGE_SIZE));
+  // Clamp current page in case filters reduced the count below current page
+  if (vpCurrentPage > totalPages) vpCurrentPage = totalPages;
+  if (vpCurrentPage < 1) vpCurrentPage = 1;
+  var startIdx = (vpCurrentPage - 1) * VP_PAGE_SIZE;
+  var endIdx = Math.min(startIdx + VP_PAGE_SIZE, ranked.length);
+  var pageSlice = ranked.slice(startIdx, endIdx);
+
+  // Summary line above the list
+  h += '<div style="font-size:12px;color:var(--ink-mute);margin-bottom:10px">';
+  h += 'Showing <strong>' + (startIdx + 1) + '\u2013' + endIdx + '</strong> of ' + ranked.length + ' compan' + (ranked.length !== 1 ? 'ies' : 'y');
+  h += ' \u00b7 sorted by priority';
+  h += '</div>';
+
   h+='<div style="display:flex;flex-direction:column;gap:10px">';
-  cos.forEach(function(c){
-    var pr=vpProg(c.id),ld=getVPLead(c.id),lo=VP_LEADS.find(function(o){return o.label===ld;}),vd=getVPVisitDate(c.id);
+  pageSlice.forEach(function(entry){
+    var c = entry.company;
+    var reason = entry.reason;
+    var pr=vpProg(c.id), ld=getVPLead(c.id), lo=VP_LEADS.find(function(o){return o.label===ld;}), vd=getVPVisitDate(c.id);
     h+='<div class="company-card" onclick="vpActiveId=\''+c.id+'\';vpExpanded=null;renderVisitPrep()" style="padding:14px">';
-    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+    h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">';
     h+='<span style="font-weight:600;font-size:15px;flex:1">'+esc(c.name)+'</span>';
     if(lo)h+='<span style="padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;color:'+lo.color+';border:1px solid '+lo.color+'">'+lo.emoji+' '+lo.label+'</span>';
     h+='<span style="font-size:12px;font-weight:600;color:'+(pr===100?'var(--green)':'var(--ink-mute)')+'">'+pr+'%</span></div>';
+
+    // Priority reason label (tells the user why this is where it is)
+    h+='<div style="font-size:11px;color:var(--ink-soft);margin-bottom:8px;font-weight:500">'+reason.icon+' '+reason.label+'</div>';
 
     // Meta row: contact, industry, visit date
     h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
@@ -125,7 +214,40 @@ function renderVisitPrep(){
     h+='</div></div>';
   });
   h+='</div>';
+
+  // Pagination controls (only show if more than one page)
+  if (totalPages > 1) {
+    h += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;padding:12px">';
+    // Previous button
+    if (vpCurrentPage > 1) {
+      h += '<button class="btn btn-sm" onclick="vpGoToPage(' + (vpCurrentPage - 1) + ')">\u2190 Previous</button>';
+    } else {
+      h += '<button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed">\u2190 Previous</button>';
+    }
+    h += '<span style="font-size:12px;color:var(--ink-mute);font-weight:500">Page ' + vpCurrentPage + ' of ' + totalPages + '</span>';
+    // Next button
+    if (vpCurrentPage < totalPages) {
+      h += '<button class="btn btn-sm" onclick="vpGoToPage(' + (vpCurrentPage + 1) + ')">Next \u2192</button>';
+    } else {
+      h += '<button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed">Next \u2192</button>';
+    }
+    h += '</div>';
+  }
+
   root.innerHTML=h;
+
+  // Keyboard shortcut: / focuses search. Bind once globally so we don't stack listeners on re-render.
+  if (!window.__vpSlashBound) {
+    document.addEventListener('keydown', function(e){
+      if (e.key === '/' && state.currentTab === 'visitprep' && !vpActiveId) {
+        var active = document.activeElement;
+        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+        var s = document.getElementById('vpSearch');
+        if (s) { e.preventDefault(); s.focus(); }
+      }
+    });
+    window.__vpSlashBound = true;
+  }
 }
 
 function vpRenderChecklist(cid){
