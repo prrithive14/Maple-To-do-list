@@ -14,7 +14,7 @@ const DELETED_COLS = ['id','name','status','priority','date','duration','assigne
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
 
-const VISITPREP_COLS = ['companyId','checks','notes','leadRating','updatedAt'];
+const VISITPREP_COLS = ['companyId','checks','notes','leadRating','visitDate','updatedAt'];
 
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
 const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
