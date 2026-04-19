@@ -1,7 +1,7 @@
 /* sheets.js — Google Sheets API helpers */
 
 async function sheetsRead(range) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${encodeURIComponent(range)}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
   if(!r.ok) throw new Error('Read failed: '+r.status);
   return (await r.json()).values || [];
