@@ -58,7 +58,7 @@ function renderCard(t) {
       ${t.category?`<span class="pill pill-cat pill-cat-${categoryClass(t.category)}">${esc(t.category)}</span>`:''}
       ${company?`<span class="pill pill-company">🏢 ${esc(company.name)}</span>`:''}
       ${t.date?`<span class="card-date ${overdue?'overdue':''}">${formatDate(t.date)}</span>`:''}
-      ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}
+      ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}${t.links?`<span class="card-date">📎</span>`:''}
     </div></div>`;
 }
 
