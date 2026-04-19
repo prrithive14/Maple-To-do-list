@@ -17,10 +17,10 @@ function renderVisitsForCompany(companyId) {
 function openVisitModal(id) {
   state.editingVisit = id ? state.visits.find(v=>v.id===id) : null;
   const c = state.editingCompany;
-  const v = state.editingVisit || { id: newId('VIS'), companyId: c?c.id:'', date: new Date().toISOString().slice(0,10), type: 'In-person', outcome: 'Positive', notes:'', nextStep:'', loggedBy:'Son', createdAt: nowIso() };
+  const v = state.editingVisit || { id: newId('VIS'), companyId: c?c.id:'', date: new Date().toISOString().slice(0,10), type: 'In-person', outcome: 'Positive', notes:'', nextStep:'', loggedBy:'Prrithive', createdAt: nowIso() };
   document.getElementById('vDate').value = v.date||''; document.getElementById('vType').value = v.type||'In-person';
   document.getElementById('vOutcome').value = v.outcome||'Positive'; document.getElementById('vNotes').value = v.notes||'';
-  document.getElementById('vNext').value = v.nextStep||''; document.getElementById('vBy').value = v.loggedBy||'Son';
+  document.getElementById('vNext').value = v.nextStep||''; document.getElementById('vBy').value = v.loggedBy||'Prrithive';
   document.getElementById('vDelete').style.display = id ? 'inline-flex' : 'none';
   if(!id) state.editingVisit = v;
   document.getElementById('visitModal').classList.add('open');
