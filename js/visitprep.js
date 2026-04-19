@@ -49,14 +49,11 @@ function vpFileBtn(pi,ii){var inp=document.getElementById('vpFI-'+pi+'-'+ii);if(
 async function vpFileUpload(pi,ii,inp){if(!vpActiveId)return;var co=state.companies.find(function(c){return c.id===vpActiveId;});if(!co)return;await handleVPItemFileUpload(inp.files,co.name,VISIT_PREP_PARTS[pi].items[ii],'vpF-'+pi+'-'+ii);inp.value='';}
 
 // ===== PRIORITY SCORING =====
-// Higher score = higher priority = higher in list.
-// Visit date buckets dominate (100+ point gaps). Lead rating is a +/-50 tiebreaker within a bucket.
 function vpPriorityScore(companyId) {
   var prog = vpProg(companyId);
   var vd = getVPVisitDate(companyId);
   var lead = getVPLead(companyId);
 
-  // Normalize today to midnight for consistent day math
   var today = new Date(new Date().toDateString());
   var daysUntil = null;
   if (vd) {
@@ -64,7 +61,6 @@ function vpPriorityScore(companyId) {
     daysUntil = Math.round((visit - today) / 86400000);
   }
 
-  // Visit date bucket scoring
   var dateScore, reason;
   if (daysUntil === null) {
     dateScore = 200; reason = { icon: '\ud83c\udd95', label: 'Needs scheduling' };
@@ -83,17 +79,37 @@ function vpPriorityScore(companyId) {
   } else if (daysUntil > 30) {
     dateScore = 100; reason = { icon: '\ud83d\udca4', label: 'Later' };
   } else {
-    // daysUntil < 0 and prog === 100
     dateScore = 10; reason = { icon: '\u2705', label: 'Completed' };
   }
 
-  // Lead rating bonus (tiebreaker within a bucket — never large enough to outrank a bucket)
   var leadBonus = 0;
   if (lead === 'Hot') leadBonus = 50;
   else if (lead === 'Warm') leadBonus = 25;
   else if (lead === 'Cold') leadBonus = -10;
 
   return { score: dateScore + leadBonus, reason: reason };
+}
+
+// Website link helper — globe icon that opens the company site in a new tab.
+// Shared with companies.js (same global scope). Defined here as a fallback so visitprep
+// doesn't depend on load order. If companies.js already defined it, this will redefine
+// to the same behavior — safe.
+function vpNormalizeWebsiteUrl(raw) {
+  if (!raw) return null;
+  var s = String(raw).trim();
+  if (!s) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  return 'https://' + s;
+}
+function vpCompanyWebsiteLinkHtml(companyObj) {
+  var url = vpNormalizeWebsiteUrl(companyObj.website);
+  if (!url) return '';
+  var safeUrl = esc(url);
+  return '<a href="' + safeUrl + '" target="_blank" rel="noopener noreferrer" ' +
+    'onclick="event.stopPropagation()" ' +
+    'title="Open ' + safeUrl + '" ' +
+    'style="text-decoration:none;color:var(--accent);margin-left:6px;font-size:13px;cursor:pointer" ' +
+    'aria-label="Open website in new tab">\ud83c\udf10</a>';
 }
 
 function vpUpdateSearch(){var el=document.getElementById('vpSearch');vpSearchText=el?el.value.toLowerCase():'';vpCurrentPage=1;renderVisitPrep();}
@@ -103,14 +119,12 @@ function vpGoToPage(page){vpCurrentPage=page;renderVisitPrep();}
 
 function vpGetFilteredCompanies(){
   var cos=state.companies.slice();
-  // Filter by search — now also searches notes
   if(vpSearchText){
     cos = cos.filter(function(c){
       var hay = ((c.name||'') + ' ' + (c.contact||'') + ' ' + (c.industry||'') + ' ' + (c.notes||'')).toLowerCase();
       return hay.indexOf(vpSearchText) !== -1;
     });
   }
-  // Filter by lead
   if(vpFilterLead){
     if (vpFilterLead === 'none') {
       cos = cos.filter(function(c){ return !getVPLead(c.id); });
@@ -118,12 +132,10 @@ function vpGetFilteredCompanies(){
       cos = cos.filter(function(c){ return getVPLead(c.id) === vpFilterLead; });
     }
   }
-  // Filter by progress
   if(vpFilterProgress==='not-started'){cos=cos.filter(function(c){return vpProg(c.id)===0;});}
   else if(vpFilterProgress==='in-progress'){cos=cos.filter(function(c){var p=vpProg(c.id);return p>0&&p<100;});}
   else if(vpFilterProgress==='complete'){cos=cos.filter(function(c){return vpProg(c.id)===100;});}
 
-  // Compute priority score for each, then sort: score desc, then alphabetical
   cos = cos.map(function(c){
     var p = vpPriorityScore(c.id);
     return { company: c, score: p.score, reason: p.reason };
@@ -132,7 +144,7 @@ function vpGetFilteredCompanies(){
     if (b.score !== a.score) return b.score - a.score;
     return (a.company.name || '').localeCompare(b.company.name || '');
   });
-  return cos;  // array of {company, score, reason}
+  return cos;
 }
 
 function renderVisitPrep(){
@@ -142,7 +154,6 @@ function renderVisitPrep(){
 
   var h='<div style="margin-bottom:16px"><h2 style="font-family:\'Fraunces\',serif;font-size:20px;font-weight:600;margin:0">Visit Preparation</h2></div>';
 
-  // Search + Filters
   h+='<div class="filters" style="margin-bottom:16px">';
   h+='<input class="search-input" id="vpSearch" placeholder="Search name, contact, industry, notes... (press /)" value="'+esc(vpSearchText)+'" oninput="vpUpdateSearch()">';
   h+='<select class="filter-select" onchange="vpUpdateFilterLead(this.value)">';
@@ -164,16 +175,13 @@ function renderVisitPrep(){
     return;
   }
 
-  // Pagination math
   var totalPages = Math.max(1, Math.ceil(ranked.length / VP_PAGE_SIZE));
-  // Clamp current page in case filters reduced the count below current page
   if (vpCurrentPage > totalPages) vpCurrentPage = totalPages;
   if (vpCurrentPage < 1) vpCurrentPage = 1;
   var startIdx = (vpCurrentPage - 1) * VP_PAGE_SIZE;
   var endIdx = Math.min(startIdx + VP_PAGE_SIZE, ranked.length);
   var pageSlice = ranked.slice(startIdx, endIdx);
 
-  // Summary line above the list
   h += '<div style="font-size:12px;color:var(--ink-mute);margin-bottom:10px">';
   h += 'Showing <strong>' + (startIdx + 1) + '\u2013' + endIdx + '</strong> of ' + ranked.length + ' compan' + (ranked.length !== 1 ? 'ies' : 'y');
   h += ' \u00b7 sorted by priority';
@@ -184,16 +192,16 @@ function renderVisitPrep(){
     var c = entry.company;
     var reason = entry.reason;
     var pr=vpProg(c.id), ld=getVPLead(c.id), lo=VP_LEADS.find(function(o){return o.label===ld;}), vd=getVPVisitDate(c.id);
+    var webLink = vpCompanyWebsiteLinkHtml(c);
     h+='<div class="company-card" onclick="vpActiveId=\''+c.id+'\';vpExpanded=null;renderVisitPrep()" style="padding:14px">';
     h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">';
-    h+='<span style="font-weight:600;font-size:15px;flex:1">'+esc(c.name)+'</span>';
+    // Name + website globe in a flex span so they stay together on the left
+    h+='<span style="font-weight:600;font-size:15px;flex:1;display:flex;align-items:center">'+esc(c.name)+webLink+'</span>';
     if(lo)h+='<span style="padding:2px 10px;border-radius:20px;font-size:11px;font-weight:600;color:'+lo.color+';border:1px solid '+lo.color+'">'+lo.emoji+' '+lo.label+'</span>';
     h+='<span style="font-size:12px;font-weight:600;color:'+(pr===100?'var(--green)':'var(--ink-mute)')+'">'+pr+'%</span></div>';
 
-    // Priority reason label (tells the user why this is where it is)
     h+='<div style="font-size:11px;color:var(--ink-soft);margin-bottom:8px;font-weight:500">'+reason.icon+' '+reason.label+'</div>';
 
-    // Meta row: contact, industry, visit date
     h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
     if(c.contact)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.contact)+'</span>';
     if(c.industry)h+='<span style="font-size:11px;color:var(--ink-soft);background:var(--bg-sunken);padding:2px 8px;border-radius:12px">'+esc(c.industry)+'</span>';
@@ -203,7 +211,6 @@ function renderVisitPrep(){
     }
     h+='</div>';
 
-    // Progress bars
     h+='<div style="display:flex;gap:8px">';
     VISIT_PREP_PARTS.forEach(function(part,pi){var pp=vpPartProg(c.id,pi);
       h+='<div style="flex:1"><div style="display:flex;justify-content:space-between;margin-bottom:3px">';
@@ -215,17 +222,14 @@ function renderVisitPrep(){
   });
   h+='</div>';
 
-  // Pagination controls (only show if more than one page)
   if (totalPages > 1) {
     h += '<div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;padding:12px">';
-    // Previous button
     if (vpCurrentPage > 1) {
       h += '<button class="btn btn-sm" onclick="vpGoToPage(' + (vpCurrentPage - 1) + ')">\u2190 Previous</button>';
     } else {
       h += '<button class="btn btn-sm" disabled style="opacity:0.4;cursor:not-allowed">\u2190 Previous</button>';
     }
     h += '<span style="font-size:12px;color:var(--ink-mute);font-weight:500">Page ' + vpCurrentPage + ' of ' + totalPages + '</span>';
-    // Next button
     if (vpCurrentPage < totalPages) {
       h += '<button class="btn btn-sm" onclick="vpGoToPage(' + (vpCurrentPage + 1) + ')">Next \u2192</button>';
     } else {
@@ -236,7 +240,6 @@ function renderVisitPrep(){
 
   root.innerHTML=h;
 
-  // Keyboard shortcut: / focuses search. Bind once globally so we don't stack listeners on re-render.
   if (!window.__vpSlashBound) {
     document.addEventListener('keydown', function(e){
       if (e.key === '/' && state.currentTab === 'visitprep' && !vpActiveId) {
@@ -254,13 +257,14 @@ function vpRenderChecklist(cid){
   var root=document.getElementById('visitPrepContainer');if(!root)return;
   var co=state.companies.find(function(c){return c.id===cid;});if(!co){vpActiveId=null;renderVisitPrep();return;}
   var pr=vpProg(cid),ld=getVPLead(cid),gn=getVPGenNotes(cid),vd=getVPVisitDate(cid);
+  var webLink = vpCompanyWebsiteLinkHtml(co);
 
   var h='<button class="btn btn-sm" onclick="vpActiveId=null;vpExpanded=null;renderVisitPrep()" style="margin-bottom:16px">&larr; All Companies</button>';
 
-  // Header card
   h+='<div style="background:var(--bg-card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px">';
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
-  h+='<h2 style="font-family:\'Fraunces\',serif;font-size:20px;font-weight:600;margin:0;flex:1">'+esc(co.name)+'</h2>';
+  // Company name + website globe in the checklist header too — handy when you're deep in prep
+  h+='<h2 style="font-family:\'Fraunces\',serif;font-size:20px;font-weight:600;margin:0;flex:1;display:flex;align-items:center">'+esc(co.name)+webLink+'</h2>';
   h+='<button class="btn btn-sm" onclick="vpPDF(\''+cid+'\')">&#128196; PDF</button></div>';
 
   if(co.contact||co.industry){h+='<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
@@ -268,7 +272,6 @@ function vpRenderChecklist(cid){
     if(co.industry)h+='<span style="font-size:11px;color:var(--blue);background:rgba(74,108,138,0.1);padding:2px 10px;border-radius:12px">'+esc(co.industry)+'</span>';
     h+='</div>';}
 
-  // Visit date
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">';
   h+='<span style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Visit Date:</span>';
   h+='<input type="date" id="vpVisitDate" value="'+esc((vd||'').slice(0,10))+'" onchange="vpSetVisitDate(\''+cid+'\')" style="padding:4px 8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg-card);color:var(--ink);font-size:12px;font-family:inherit">';
@@ -279,19 +282,16 @@ function vpRenderChecklist(cid){
   }
   h+='</div>';
 
-  // Progress
   h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><div style="flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden">';
   h+='<div style="height:100%;width:'+pr+'%;background:'+(pr===100?'var(--green)':'var(--accent)')+';border-radius:3px;transition:width 0.4s"></div></div>';
   h+='<span style="font-size:12px;font-weight:600;color:'+(pr===100?'var(--green)':'var(--ink-mute)')+'">'+pr+'%</span></div>';
 
-  // Lead
   h+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:var(--ink-mute);font-weight:600;text-transform:uppercase">Lead:</span>';
   VP_LEADS.forEach(function(o){var a=ld===o.label;
     h+='<button onclick="vpSetLead(\''+cid+'\',\''+o.label+'\')" class="btn btn-sm" style="font-size:11px;padding:3px 12px;border-radius:20px;'+(a?'border-color:'+o.color+';color:'+o.color+';font-weight:700':'')+'">'+o.emoji+' '+o.label+'</button>';
   });
   h+='</div></div>';
 
-  // Checklist sections
   VISIT_PREP_PARTS.forEach(function(part,pi){
     var pp=vpPartProg(cid,pi),ad=pp.done===pp.total;
     h+='<div style="background:var(--bg-card);border:1px solid '+(ad?part.color:'var(--line)')+';border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px">';
@@ -329,7 +329,6 @@ function vpRenderChecklist(cid){
     h+='</div></div>';
   });
 
-  // General notes
   h+='<div style="margin-top:4px"><label style="font-size:11px;font-weight:600;color:var(--ink-mute);display:block;margin-bottom:6px;text-transform:uppercase">&#128221; General Notes</label>';
   h+='<textarea id="vpGen" onblur="vpSaveGenNotes(\''+cid+'\')" placeholder="Overall strategy, key takeaways, next steps..." style="width:100%;min-height:80px;padding:12px;border-radius:var(--radius-lg);border:1px solid var(--line);background:var(--bg-card);color:var(--ink);font-size:13px;font-family:inherit;resize:vertical;outline:none;box-sizing:border-box">'+esc(gn)+'</textarea></div>';
   root.innerHTML=h;
