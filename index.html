@@ -48,6 +48,7 @@
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
   <button class="tab" data-tab="archive" onclick="switchTab('archive')">📦 Archive <span class="count" id="countArchive">0</span></button>
+  <button class="tab" data-tab="visitprep" onclick="switchTab('visitprep')">📋 Visit Prep</button>
 </nav>
 
 <main class="main">
@@ -118,6 +119,10 @@
       <div class="dash-panel"><h3 class="panel-title">Pipeline by company</h3><div id="pipelineList"></div></div>
       <div class="dash-panel"><h3 class="panel-title">Tasks due this week</h3><div id="dueThisWeek"></div></div>
     </div>
+  </section>
+
+  <section id="tab-visitprep" class="tab-pane" style="display:none">
+    <div id="visitPrepContainer"></div>
   </section>
 
   <section id="tab-archive" class="tab-pane" style="display:none">
@@ -314,6 +319,7 @@
 <script src="js/companies.js"></script>
 <script src="js/visits.js"></script>
 <script src="js/dashboard.js"></script>
+<script src="js/visitprep.js"></script>
 <script src="js/app.js"></script>
 <script src="js/chat.js"></script>
 </body>
