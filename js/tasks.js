@@ -51,7 +51,7 @@ function renderKanban() {
 function renderCard(t) {
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';
-  return `<div class="card" draggable="true" ondragstart="onDragStart(event,'${t.id}')" onclick="openTaskModal('${t.id}')">
+  return `<div class="card" draggable="true" ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)" onclick="openTaskModal('${t.id}')">
     <div class="card-title">${esc(t.name)}</div>
     <div class="card-meta">
       ${t.priority?`<span class="pill pill-priority-${t.priority}">${t.priority}</span>`:''}
@@ -63,6 +63,11 @@ function renderCard(t) {
 }
 
 function onDragStart(e, id) { e.dataTransfer.setData('text/plain', id); e.target.classList.add('dragging'); }
+function onDragEnd(e) {
+  // Always clean up the dragging class, whether the drop succeeded, was cancelled, or landed outside a drop zone
+  if (e.target && e.target.classList) e.target.classList.remove('dragging');
+  document.querySelectorAll('.card.dragging').forEach(function(c) { c.classList.remove('dragging'); });
+}
 async function onDrop(e, status) {
   document.querySelectorAll('.card.dragging').forEach(c=>c.classList.remove('dragging'));
   const id = e.dataTransfer.getData('text/plain');
@@ -102,7 +107,7 @@ function renderCalendar() {
       <div class="cal-day-header"><span>${days[i]}</span><span class="cal-day-num">${d.getDate()}</span></div>
       <div class="cal-day-tasks">${dayTasks.map(t => {
         const cc = categoryClass(t.category); const isDone = t.status === 'Done';
-        return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">${esc(t.name)}</div>`;
+        return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" ondragend="onCalDragEnd(event)" onclick="event.stopPropagation(); openTaskModal('${t.id}')" title="${esc(t.name)}${t.assignee?' · '+esc(t.assignee):''}">${esc(t.name)}</div>`;
       }).join('') || ''}</div></div>`;
   }
   grid.innerHTML = html;
@@ -111,7 +116,7 @@ function renderCalendar() {
   if(!unsched) { unsched = document.createElement('div'); unsched.id = 'calUnscheduled'; document.getElementById('calendarView').appendChild(unsched); }
   unsched.innerHTML = noDate.length > 0 ? `<div class="cal-unscheduled"><div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div><div class="cal-day-tasks">${noDate.map(t => {
     const cc = categoryClass(t.category);
-    return `<div class="cal-task cal-task-cat-${cc}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
+    return `<div class="cal-task cal-task-cat-${cc}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" ondragend="onCalDragEnd(event)" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
   }).join('')}</div></div>` : '';
 }
 
@@ -121,6 +126,13 @@ function onCalDragStart(e, taskId) {
   e.dataTransfer.setData('text/plain', taskId);
   e.dataTransfer.effectAllowed = 'move';
   e.target.classList.add('cal-dragging');
+}
+
+function onCalDragEnd(e) {
+  // Clean up on drag end, whether drop succeeded or was cancelled
+  if (e.target && e.target.classList) e.target.classList.remove('cal-dragging');
+  document.querySelectorAll('.cal-dragging').forEach(function(d) { d.classList.remove('cal-dragging'); });
+  document.querySelectorAll('.cal-drop-target').forEach(function(d) { d.classList.remove('cal-drop-target'); });
 }
 
 function onCalDragOver(e) {
