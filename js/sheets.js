@@ -70,6 +70,19 @@ async function ensureDeletedSheet() {
   console.log('Created Deleted sheet with headers');
 }
 
+async function ensureVisitPrepSheet() {
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
+  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
+  const meta = await metaResp.json();
+  if (meta.sheets.some(function(s) { return s.properties.title === 'VisitPrep'; })) return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'VisitPrep' } } }] })
+  });
+  await sheetsWrite('VisitPrep!A1:E1', [VISITPREP_COLS]);
+}
+
 async function pullAll() {
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -77,16 +90,19 @@ async function pullAll() {
     // Ensure Deleted sheet exists before reading
     await ensureDeletedSheet();
 
-    const [tRows, cRows, vRows, dRows] = await Promise.all([
+    await ensureVisitPrepSheet();
+    const [tRows, cRows, vRows, dRows, vpRows] = await Promise.all([
       sheetsRead('Tasks!A2:Z'),
       sheetsRead('Companies!A2:Z'),
       sheetsRead('Visits!A2:Z'),
-      sheetsRead('Deleted!A2:Z').catch(() => []),
+      sheetsRead('Deleted!A2:Z').catch(function() { return []; }),
+      sheetsRead('VisitPrep!A2:Z').catch(function() { return []; }),
     ]);
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
     state.visits = vRows.filter(r=>r[0]).map(r=>rowToObj(r, VISIT_COLS));
     state.deleted = dRows.filter(r=>r[0]).map(r=>rowToObj(r, DELETED_COLS));
+    state.visitPreps = vpRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, VISITPREP_COLS);});
     cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     autoArchiveOldDone();
