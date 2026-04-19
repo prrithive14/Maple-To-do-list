@@ -1,4 +1,4 @@
-/* chat.js — Chat agent v4: 15 tools (added request_review + respond_to_review) + bulk import */
+/* chat.js — Chat agent v5: 15 tools + bulk import + meeting mode (batch task extraction) */
 
 (function chatInit() {
   const fab = document.getElementById("chatFab");
@@ -8,14 +8,22 @@
   const input = document.getElementById("chatInput");
   const sendBtn = document.getElementById("chatSend");
   const attachBtn = document.getElementById("chatAttach");
+  const meetingBtn = document.getElementById("chatMeeting");
   const fileInp = document.getElementById("chatFile");
   const preview = document.getElementById("chatPreview");
   let chatHistory = [];
   let pendingImages = [];
   let pendingImportData = null;
 
+  // --- Meeting mode state ---
+  let currentMode = 'normal';            // 'normal' | 'meeting'
+  let pendingTaskBatch = null;           // { tasks: [...], panelEl, chipEl }
+  let batchRowCounter = 0;               // for unique DOM ids on batch rows
+
   const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','companyId','notes','links'];
   const COMPANY_UPDATE_FIELDS = ['name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes'];
+  const DEFAULT_PLACEHOLDER = input.placeholder || "Tell me what to do…";
+  const MEETING_PLACEHOLDER = "Paste or dictate your meeting notes. I'll extract action items as tasks.";
 
   fab.addEventListener("click", () => { panel.classList.toggle("open"); if (panel.classList.contains("open")) input.focus(); });
   closeBtn.addEventListener("click", () => panel.classList.remove("open"));
@@ -23,8 +31,267 @@
   sendBtn.addEventListener("click", sendChat);
   attachBtn.addEventListener("click", () => fileInp.click());
   fileInp.addEventListener("change", handleFiles);
+  if (meetingBtn) meetingBtn.addEventListener("click", toggleMeetingMode);
 
   function bubble(text, cls) { const d = document.createElement("div"); d.className = "chatMsg " + cls; d.textContent = text; msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight; return d; }
+
+  // ============================================================
+  //   MEETING MODE
+  // ============================================================
+
+  function toggleMeetingMode() {
+    if (currentMode === 'meeting') exitMeetingMode();
+    else enterMeetingMode();
+  }
+
+  function enterMeetingMode() {
+    currentMode = 'meeting';
+    if (meetingBtn) meetingBtn.classList.add('active');
+    input.classList.add('meeting-mode');
+    input.placeholder = MEETING_PLACEHOLDER;
+
+    // Insert mode chip before #chatInputRow
+    const chip = document.createElement('div');
+    chip.className = 'chatModeChip';
+    chip.id = 'chatModeChip';
+    chip.innerHTML = '📝 Meeting mode <button type="button" title="Exit meeting mode">×</button>';
+    chip.querySelector('button').addEventListener('click', exitMeetingMode);
+    const inputRow = document.getElementById('chatInputRow');
+    inputRow.parentNode.insertBefore(chip, inputRow);
+
+    input.focus();
+  }
+
+  function exitMeetingMode() {
+    currentMode = 'normal';
+    if (meetingBtn) meetingBtn.classList.remove('active');
+    input.classList.remove('meeting-mode');
+    input.placeholder = DEFAULT_PLACEHOLDER;
+    const chip = document.getElementById('chatModeChip');
+    if (chip) chip.remove();
+    // Note: we deliberately do NOT clear pendingTaskBatch here. If the user
+    // toggles the mode chip mid-review, their batch stays until they act on it.
+  }
+
+  // Resolve proposed add_task calls from the worker into a batch of task objects
+  // ready for the UI. Maps companyName -> companyId by existing companies.
+  function proposedCallsToBatch(toolCalls) {
+    const batch = [];
+    for (const call of toolCalls) {
+      if (call.name !== 'add_task') continue; // defensive — meeting mode should only return add_task
+      const args = call.input || {};
+      let companyId = args.companyId || '';
+      let companyName = args.companyName || '';
+
+      // If companyId given and it exists, we're good. If only companyName given, try to match.
+      if (!companyId && companyName) {
+        const match = state.companies.find(c => c.name.toLowerCase().trim() === String(companyName).toLowerCase().trim());
+        if (match) { companyId = match.id; companyName = ''; /* resolved */ }
+      }
+      // If companyId given, also populate companyName for display
+      let displayCompanyName = '';
+      if (companyId) {
+        const co = state.companies.find(c => c.id === companyId);
+        if (co) displayCompanyName = co.name;
+      } else if (companyName) {
+        displayCompanyName = companyName + ' (not in CRM)';
+      }
+
+      batch.push({
+        rowId: 'batchRow_' + (++batchRowCounter),
+        checked: true,
+        name: args.name || '',
+        status: 'Not started',
+        priority: args.priority || 'Medium',
+        date: args.date || '',
+        duration: args.duration || '',
+        assignee: args.assignee || getCurrentUser() || 'Prrithive',
+        category: args.category || (companyId ? 'Sales' : 'Personal'),
+        companyId: companyId,
+        unresolvedCompanyName: companyId ? '' : companyName,
+        displayCompanyName: displayCompanyName,
+        notes: args.notes || '',
+        links: args.links || ''
+      });
+    }
+    return batch;
+  }
+
+  function renderBatchPanel(batch) {
+    // Remove any existing batch panel (defensive — shouldn't happen)
+    if (pendingTaskBatch && pendingTaskBatch.panelEl) pendingTaskBatch.panelEl.remove();
+
+    const panelEl = document.createElement('div');
+    panelEl.className = 'chatBatchPanel';
+
+    const header = document.createElement('div');
+    header.className = 'chatBatchHeader';
+    header.innerHTML = '<span>Proposed tasks</span><span class="batchCount">' + batch.length + ' item' + (batch.length !== 1 ? 's' : '') + '</span>';
+    panelEl.appendChild(header);
+
+    // Build company options once
+    const companyOptionsHTML = '<option value="">— none —</option>' +
+      state.companies.map(c => '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>').join('');
+
+    for (const t of batch) {
+      const row = document.createElement('div');
+      row.className = 'chatBatchRow';
+      row.dataset.rowId = t.rowId;
+      row.innerHTML = `
+        <input type="checkbox" ${t.checked ? 'checked' : ''} data-field="checked">
+        <input type="text" class="batchName" data-field="name" value="${esc(t.name)}" placeholder="Task name">
+        <div class="chatBatchFields">
+          <select data-field="assignee">
+            <option${t.assignee==='Prrithive'?' selected':''}>Prrithive</option>
+            <option${t.assignee==='Sridharan'?' selected':''}>Sridharan</option>
+            <option${t.assignee==='Both'?' selected':''}>Both</option>
+          </select>
+          <input type="date" data-field="date" value="${esc(t.date)}">
+          <select data-field="priority">
+            <option${t.priority==='Low'?' selected':''}>Low</option>
+            <option${t.priority==='Medium'?' selected':''}>Medium</option>
+            <option${t.priority==='High'?' selected':''}>High</option>
+            <option${t.priority==='Urgent'?' selected':''}>Urgent</option>
+          </select>
+          <select data-field="category">
+            <option${t.category==='Sales'?' selected':''}>Sales</option>
+            <option${t.category==='Marketing'?' selected':''}>Marketing</option>
+            <option${t.category==='Admin'?' selected':''}>Admin</option>
+            <option${t.category==='PR Application'?' selected':''}>PR Application</option>
+            <option${t.category==='Personal'?' selected':''}>Personal</option>
+            <option${t.category==='Learning'?' selected':''}>Learning</option>
+            <option${t.category==='Other'?' selected':''}>Other</option>
+          </select>
+          <select data-field="companyId">${companyOptionsHTML}</select>
+          ${t.unresolvedCompanyName ? '<span class="batchCompanyName" title="Not in CRM — pick a match from the dropdown or leave as none">' + esc(t.unresolvedCompanyName) + '</span>' : ''}
+          ${t.notes ? '<span class="batchNotesPreview">' + esc(t.notes) + '</span>' : ''}
+        </div>
+      `;
+      // set select value for companyId
+      const compSel = row.querySelector('[data-field="companyId"]');
+      if (compSel) compSel.value = t.companyId || '';
+
+      // Wire up edits: any change mutates the task object in batch
+      row.addEventListener('change', (e) => {
+        const target = e.target;
+        if (!target.dataset || !target.dataset.field) return;
+        const field = target.dataset.field;
+        if (field === 'checked') {
+          t.checked = target.checked;
+          row.classList.toggle('unchecked', !t.checked);
+        } else {
+          t[field] = target.value;
+        }
+        updateBatchCreateButton();
+      });
+      row.addEventListener('input', (e) => {
+        const target = e.target;
+        if (target.dataset && target.dataset.field === 'name') {
+          t.name = target.value;
+          updateBatchCreateButton();
+        }
+      });
+
+      panelEl.appendChild(row);
+    }
+
+    // Action buttons
+    const actions = document.createElement('div');
+    actions.className = 'chatBatchActions';
+    actions.innerHTML = `
+      <button type="button" data-action="cancel">Cancel</button>
+      <button type="button" class="primary" data-action="create">Create tasks</button>
+    `;
+    actions.querySelector('[data-action="cancel"]').addEventListener('click', cancelBatch);
+    actions.querySelector('[data-action="create"]').addEventListener('click', confirmBatch);
+    panelEl.appendChild(actions);
+
+    msgs.appendChild(panelEl);
+    msgs.scrollTop = msgs.scrollHeight;
+
+    pendingTaskBatch = { tasks: batch, panelEl: panelEl };
+    updateBatchCreateButton();
+  }
+
+  function updateBatchCreateButton() {
+    if (!pendingTaskBatch || !pendingTaskBatch.panelEl) return;
+    const checked = pendingTaskBatch.tasks.filter(t => t.checked && t.name.trim() && t.date);
+    const btn = pendingTaskBatch.panelEl.querySelector('[data-action="create"]');
+    if (!btn) return;
+    btn.disabled = checked.length === 0;
+    btn.textContent = checked.length ? ('Create ' + checked.length + ' task' + (checked.length !== 1 ? 's' : '')) : 'Create tasks';
+  }
+
+  function cancelBatch() {
+    if (!pendingTaskBatch) return;
+    if (pendingTaskBatch.panelEl) pendingTaskBatch.panelEl.remove();
+    pendingTaskBatch = null;
+    bubble('Batch cancelled. No tasks were created.', 'system');
+  }
+
+  async function confirmBatch() {
+    if (!pendingTaskBatch) return;
+    const toCreate = pendingTaskBatch.tasks.filter(t => t.checked && t.name.trim() && t.date);
+    if (toCreate.length === 0) {
+      bubble('Nothing to create — check at least one task with a name and date.', 'error');
+      return;
+    }
+    // Freeze UI: disable all inputs + buttons in the panel
+    const panelEl = pendingTaskBatch.panelEl;
+    panelEl.querySelectorAll('input, select, button').forEach(el => el.disabled = true);
+    const createBtn = panelEl.querySelector('[data-action="create"]');
+    const originalLabel = createBtn.textContent;
+    createBtn.textContent = 'Creating…';
+
+    sendBtn.disabled = true;
+    let created = 0, failed = 0;
+    for (const t of toCreate) {
+      try {
+        const taskObj = {
+          id: newId('TSK'),
+          name: t.name.trim(),
+          status: t.status || 'Not started',
+          priority: t.priority || 'Medium',
+          date: t.date,
+          duration: t.duration || '',
+          assignee: t.assignee || 'Prrithive',
+          category: t.category || 'Personal',
+          companyId: t.companyId || '',
+          notes: t.notes || '',
+          links: t.links || '',
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          reviewer: '',
+          reviewStatus: '',
+          reviewHistory: ''
+        };
+        state.tasks.push(taskObj);
+        await upsertRow(SHEET_TABS.tasks, TASK_COLS, taskObj);
+        created++;
+      } catch (err) {
+        console.error('Batch create failed for', t.name, err);
+        failed++;
+      }
+    }
+    // Tear down panel
+    panelEl.remove();
+    pendingTaskBatch = null;
+    sendBtn.disabled = false;
+
+    let summary = '✓ Created ' + created + ' task' + (created !== 1 ? 's' : '');
+    if (failed > 0) summary += ' · ' + failed + ' failed';
+    bubble(summary, 'action');
+    refreshAll();
+    cacheLocal();
+
+    // Exit meeting mode after a successful batch — keeps things clean.
+    // If user wants another batch, they tap 📝 again.
+    if (currentMode === 'meeting') exitMeetingMode();
+  }
+
+  // ============================================================
+  //   IMAGES + SPREADSHEET IMPORT (unchanged)
+  // ============================================================
 
   function isSpreadsheet(file) {
     const ext = file.name.toLowerCase().split('.').pop();
@@ -204,21 +471,45 @@
   }
   window.__removeChatImg = function(id) { pendingImages = pendingImages.filter(function(x) { return x.id !== id; }); renderPreview(); };
 
+  // ============================================================
+  //   SEND CHAT
+  // ============================================================
+
   async function sendChat() {
     const text = input.value.trim(); const images = pendingImages.slice();
-    if (pendingImportData && text.toLowerCase().match(/^(yes|y|confirm|ok|go|do it|import|sure)$/)) {
-      input.value = ""; bubble(text, "user"); await executeBulkImport(); return;
-    } else if (pendingImportData && text.toLowerCase().match(/^(no|n|cancel|skip|nope)$/)) {
-      input.value = ""; bubble(text, "user"); pendingImportData = null; bubble("Import cancelled.", "system"); return;
+
+    // Bulk import confirmation flow (only in normal mode)
+    if (currentMode === 'normal') {
+      if (pendingImportData && text.toLowerCase().match(/^(yes|y|confirm|ok|go|do it|import|sure)$/)) {
+        input.value = ""; bubble(text, "user"); await executeBulkImport(); return;
+      } else if (pendingImportData && text.toLowerCase().match(/^(no|n|cancel|skip|nope)$/)) {
+        input.value = ""; bubble(text, "user"); pendingImportData = null; bubble("Import cancelled.", "system"); return;
+      }
     }
+
     if (!text && images.length === 0) return;
     if (!accessToken) { bubble("Sign in first so I can write to your Sheet.", "error"); return; }
+
+    // In meeting mode, images are ignored (defer to future extension)
+    if (currentMode === 'meeting' && images.length > 0) {
+      bubble("Images are ignored in meeting mode. Text notes only.", "system");
+      pendingImages = []; renderPreview();
+    }
+
+    // If there's already a batch open, don't stack another.
+    if (currentMode === 'meeting' && pendingTaskBatch) {
+      bubble("Finish or cancel the current batch before sending more notes.", "system");
+      return;
+    }
+
     input.value = ""; pendingImages = []; renderPreview(); sendBtn.disabled = true;
-    bubble(text || "[" + images.length + " business card" + (images.length > 1 ? "s" : "") + " attached]", "user");
-    const thinking = bubble(images.length ? "Reading card(s)…" : "Thinking…", "system");
+
+    const displayText = text || ("[" + images.length + " business card" + (images.length > 1 ? "s" : "") + " attached]");
+    bubble(displayText, "user");
+    const thinkingLabel = (currentMode === 'meeting') ? "Reading meeting notes…" : (images.length ? "Reading card(s)…" : "Thinking…");
+    const thinking = bubble(thinkingLabel, "system");
+
     try {
-      // Include currentUser in context so the worker's LLM can reason about review actions.
-      // Also include per-task review state (lightweight — just reviewer + reviewStatus, not full history)
       const context = {
         today: new Date().toISOString().slice(0,10),
         user: getCurrentUser(),
@@ -228,10 +519,43 @@
         categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.',
         reviewGuide: 'Review workflow: tasks can have reviewer="Prrithive"|"Sridharan" and reviewStatus=""|"pending"|"changes_requested"|"approved". Use request_review to ask someone to review, respond_to_review to approve or request changes. Only the named reviewer can approve or request changes. Only the task assignee can re-request review after changes.'
       };
-      const resp = await fetch(CHAT_WORKER_URL, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history: chatHistory, context: context, images: images.map(function(i) { return { mediaType: i.mediaType, data: i.data }; }) }) });
-      const data = await resp.json(); thinking.remove();
+
+      const resp = await fetch(CHAT_WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: text,
+          history: (currentMode === 'meeting') ? [] : chatHistory,  // meeting mode is stateless per-send
+          context: context,
+          images: (currentMode === 'meeting') ? [] : images.map(function(i) { return { mediaType: i.mediaType, data: i.data }; }),
+          mode: currentMode
+        })
+      });
+
+      const data = await resp.json();
+      thinking.remove();
+
       if (!resp.ok) { bubble("Error: " + (data.error || "unknown"), "error"); return; }
+
+      // === MEETING MODE: defer tool calls into a batch ===
+      if (currentMode === 'meeting') {
+        if (data.reply) bubble(data.reply, "assistant");
+        const addTaskCalls = (data.toolCalls || []).filter(c => c.name === 'add_task');
+        const otherCalls = (data.toolCalls || []).filter(c => c.name !== 'add_task');
+        if (otherCalls.length > 0) {
+          bubble("Ignoring " + otherCalls.length + " non-task tool call" + (otherCalls.length !== 1 ? 's' : '') + " in meeting mode.", "system");
+        }
+        if (addTaskCalls.length === 0) {
+          // No actions found — stay in meeting mode so user can edit and retry
+          return;
+        }
+        const batch = proposedCallsToBatch(addTaskCalls);
+        renderBatchPanel(batch);
+        // Meeting mode does NOT push to chatHistory — keeps the conversation clean
+        return;
+      }
+
+      // === NORMAL MODE: existing flow ===
       if (data.reply) bubble(data.reply, "assistant");
       if (data.toolCalls && data.toolCalls.length) {
         const createdByName = {};
@@ -291,7 +615,6 @@
         const taskName = t.name; await archiveTask(args.id, 'deleted'); return { summary: 'Archived task "' + taskName + '"' };
       }
       case "request_review": {
-        // args: { taskId, reviewer, comment? }
         const t = state.tasks.find(function(x){ return x.id === args.taskId; });
         if (!t) throw new Error("Task not found: " + args.taskId);
         if (!canUserReview()) throw new Error("Unknown user — cannot take review actions");
@@ -307,7 +630,6 @@
         return { summary: 'Requested review of "' + t.name + '" from ' + args.reviewer };
       }
       case "respond_to_review": {
-        // args: { taskId, response: "approve"|"request_changes"|"re_request", comment? }
         const t = state.tasks.find(function(x){ return x.id === args.taskId; });
         if (!t) throw new Error("Task not found: " + args.taskId);
         if (!canUserReview()) throw new Error("Unknown user — cannot take review actions");
