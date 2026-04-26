@@ -881,3 +881,84 @@ html[data-theme="dark"].test-env .header { background: rgba(45,30,10,.92); borde
 /* Theme toggle button — subtle hover */
 #themeToggle { font-size: 16px; line-height: 1; }
 html[data-theme="dark"] #themeToggle { color: #e0b14a; }
+
+/* ============================================================
+   ACCESS DENIED SCREEN
+   Shown by denyAccess() in auth.js when an unauthorized user signs in.
+   Uses CSS variables so it themes correctly in both light and dark mode.
+   ============================================================ */
+
+#accessDenied {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+  z-index: 500;
+}
+#accessDenied[style*="flex"] { display: flex !important; }
+
+.access-denied-card {
+  max-width: 480px;
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.access-denied-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  line-height: 1;
+}
+.access-denied-card h2 {
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 28px;
+  font-weight: 600;
+  font-style: italic;
+  margin-bottom: 12px;
+  color: var(--ink);
+}
+.access-denied-lead {
+  color: var(--ink-soft);
+  font-size: 15px;
+  margin-bottom: 20px;
+}
+.access-denied-email {
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 16px;
+  word-break: break-all;
+}
+.access-denied-email strong { color: var(--ink); font-weight: 600; }
+.access-denied-help {
+  color: var(--ink-mute);
+  font-size: 13px;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+.access-denied-help strong { color: var(--ink-soft); }
+.access-denied-card .btn-primary {
+  padding: 11px 20px;
+  font-size: 14px;
+}
+
+/* ============================================================
+   PRIORITY BORDERS ON TASK CARDS
+   3px colored left border based on data-priority attribute set in tasks.js.
+   Uses CSS variables so colors adapt automatically in dark mode.
+   ============================================================ */
+
+.card[data-priority="Urgent"] { border-left: 3px solid var(--red); }
+.card[data-priority="High"]   { border-left: 3px solid var(--accent); }
+.card[data-priority="Medium"] { border-left: 3px solid var(--yellow); }
+.card[data-priority="Low"]    { border-left: 3px solid var(--ink-mute); }
+/* No data-priority or empty — no special border, falls back to default 1px */

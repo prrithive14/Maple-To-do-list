@@ -40,6 +40,19 @@
   <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="saveSetup()">Save & Continue</button>
 </div>
 
+<!-- Access denied screen — shown when an unauthorized email signs in.
+     Triggered by denyAccess() in auth.js. Token is already revoked at this point. -->
+<div id="accessDenied" style="display:none">
+  <div class="access-denied-card">
+    <div class="access-denied-icon">🔒</div>
+    <h2>Access denied</h2>
+    <p class="access-denied-lead">This app is restricted to authorized users only.</p>
+    <p class="access-denied-email">Signed in as: <strong id="accessDeniedEmail">—</strong></p>
+    <p class="access-denied-help">If you believe you should have access, contact <strong>Prrithive</strong>.</p>
+    <button class="btn btn-primary" onclick="accessDeniedReload()">Sign out and try a different account</button>
+  </div>
+</div>
+
 <div id="app" style="display:none">
 <header class="header">
   <div class="header-inner">
@@ -70,9 +83,8 @@
     </div>
     <div class="filters">
       <div class="view-toggle" id="scopeToggle">
-        <button data-scope="all" class="active" onclick="setTaskScope('all')">All</button>
+        <button data-scope="personal" class="active" onclick="setTaskScope('personal')">👤 Personal</button>
         <button data-scope="company" onclick="setTaskScope('company')">🏢 Company</button>
-        <button data-scope="personal" onclick="setTaskScope('personal')">👤 Personal</button>
       </div>
       <div class="view-toggle" id="taskViewToggle">
         <button data-view="kanban" class="active" onclick="setTaskView('kanban')">☰ Kanban</button>
@@ -81,7 +93,12 @@
       <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderTaskView()">
       <select class="filter-select" id="filterCategory" onchange="renderTaskView()"><option value="">All categories</option></select>
       <select class="filter-select" id="filterAssignee" onchange="renderTaskView()">
-        <option value="">All assignees</option><option>Prrithive</option><option>Sridharan</option><option>Both</option>
+        <option value="me">⭐ My tasks</option>
+        <option value="">All assignees</option>
+        <option value="Prrithive">Prrithive</option>
+        <option value="Sridharan">Sridharan</option>
+        <option value="Both">Both</option>
+        <option value="unassigned">Unassigned</option>
       </select>
       <select class="filter-select" id="filterCompany" onchange="renderTaskView()"><option value="">All companies</option></select>
       <!-- NEW: review filter dropdown -->

@@ -31,10 +31,10 @@ function refreshAll() {
   }
 }
 function refreshTaskCount() {
+  // taskScope is always 'company' or 'personal' now (the 'all' option was removed).
   const scopedCount = state.tasks.filter(t => {
     if(state.taskScope === 'company') return !!t.companyId;
-    if(state.taskScope === 'personal') return !t.companyId;
-    return true;
+    return !t.companyId; // 'personal'
   }).length;
   document.getElementById('countTasks').textContent = scopedCount;
 }
@@ -68,6 +68,18 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('maple_theme', next);
   applyTheme();
+}
+
+// Called by auth.js once after a successful sign-in for an authorized user.
+// Sets the assignee filter to "My tasks" so each person lands on their own view.
+// Always overrides — fresh sign-in = fresh "show me my tasks" view.
+function applyMyTasksDefault() {
+  const sel = document.getElementById('filterAssignee');
+  if (sel) {
+    sel.value = 'me';
+    state.taskAssigneeFilter = 'me';
+    if (typeof renderTaskView === 'function') renderTaskView();
+  }
 }
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {

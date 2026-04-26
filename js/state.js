@@ -2,7 +2,11 @@
 
 let state = {
   companies: [], visits: [], tasks: [], deleted: [], visitPreps: [],
-  view: 'table', taskScope: 'all', taskView: 'kanban', currentTab: 'tasks',
+  view: 'table', taskScope: 'personal', taskView: 'kanban', currentTab: 'tasks',
+  // Assignee filter: 'me' = current user's tasks (default), 'all' = everyone,
+  // 'Prrithive' / 'Sridharan' / 'Both' / 'unassigned' = specific filters.
+  // Default 'me' is set on sign-in once we know who the user is — see auth.js.
+  taskAssigneeFilter: 'me',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
   // Identity — populated by auth.js after successful sign-in via fetchUserEmail()

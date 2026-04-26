@@ -80,11 +80,24 @@ function getFilteredTasks() {
   const reviewFilter = document.getElementById('filterReview')?.value || '';
   var me = getCurrentUser();
   return state.tasks.filter(t => {
+    // Scope filter — 'all' option was removed; only 'company' or 'personal' apply.
     if(state.taskScope === 'company' && !t.companyId) return false;
     if(state.taskScope === 'personal' && t.companyId) return false;
     if(search && !(t.name||'').toLowerCase().includes(search)) return false;
     if(cat && t.category !== cat) return false;
-    if(ass && t.assignee !== ass) return false;
+    // Assignee filter — special values:
+    //   'me'         → tasks assigned to current user OR 'Both' OR unassigned (empty)
+    //   'unassigned' → tasks with empty/missing assignee
+    //   'all' or ''  → no filter (show everything)
+    //   anything else (e.g., 'Prrithive', 'Sridharan', 'Both') → exact match
+    if (ass === 'me') {
+      const a = t.assignee || '';
+      if (!(a === me || a === 'Both' || a === '')) return false;
+    } else if (ass === 'unassigned') {
+      if ((t.assignee || '') !== '') return false;
+    } else if (ass && ass !== 'all') {
+      if (t.assignee !== ass) return false;
+    }
     if(comp && t.companyId !== comp) return false;
     // Review filter
     if (reviewFilter === 'awaiting_me') {
@@ -121,7 +134,10 @@ function renderCard(t) {
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';
   const reviewPill = reviewBadgeHtml(t);
-  return `<div class="card" draggable="true" ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)" onclick="openTaskModal('${t.id}')">
+  // data-priority drives the colored left-border in styles.css.
+  // Empty string = no border (matches tasks with no priority set).
+  const prio = t.priority || '';
+  return `<div class="card" data-priority="${esc(prio)}" draggable="true" ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)" onclick="openTaskModal('${t.id}')">
     <div class="card-title">${esc(t.name)}</div>
     <div class="card-meta">
       ${t.priority?`<span class="pill pill-priority-${t.priority}">${t.priority}</span>`:''}
