@@ -61,7 +61,9 @@
       <div id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">Not signed in</span></div>
       <button id="signInBtn" class="btn" onclick="googleSignIn()">Sign in with Google</button>
       <button id="themeToggle" class="btn btn-ghost" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
-      <button class="btn btn-ghost" onclick="openSettings()" title="Settings">⚙</button>
+      <!-- Settings is hidden by default and only revealed for authorized users (see auth.js).
+           This keeps OAuth Client ID, Sheet ID, and "Reset all settings" out of reach of strangers. -->
+      <button id="settingsBtn" class="btn btn-ghost" onclick="openSettings()" title="Settings" style="display:none">⚙</button>
     </div>
   </div>
 </header>
@@ -70,9 +72,9 @@
   <!-- NEW: #reviewAlertDot sits next to the existing #taskAlertDot. Blue (#3b82f6) vs. red for overdue. -->
   <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span><span class="alert-dot" id="reviewAlertDot" style="background:#3b82f6" title=""></span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
-  <button class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-  <button class="tab" data-tab="archive" onclick="switchTab('archive')">📦 Archive <span class="count" id="countArchive">0</span></button>
   <button class="tab" data-tab="visitprep" onclick="switchTab('visitprep')">📋 Visit Prep</button>
+  <button class="tab" data-tab="learning" onclick="switchTab('learning')">📚 Learning <span class="count" id="countLearning">0</span></button>
+  <button class="tab" data-tab="archive" onclick="switchTab('archive')">📦 Archive <span class="count" id="countArchive">0</span></button>
 </nav>
 
 <main class="main">
@@ -146,18 +148,8 @@
     <div id="companiesContainer"></div>
   </section>
 
-  <section id="tab-dashboard" class="tab-pane" style="display:none">
-    <!-- NEW: personalized "Your plate" panel. Populated by renderUserPlate() in dashboard.js. Hidden when user is Unknown. -->
-    <div id="userPlate"></div>
-    <div class="dash-grid" id="statCards"></div>
-    <div class="dash-row">
-      <div class="dash-panel"><h3 class="panel-title">Visit funnel</h3><div class="funnel" id="funnelChart"></div></div>
-      <div class="dash-panel"><h3 class="panel-title">Recent activity</h3><div class="activity-list" id="activityList"></div></div>
-    </div>
-    <div class="dash-row">
-      <div class="dash-panel"><h3 class="panel-title">Pipeline by company</h3><div id="pipelineList"></div></div>
-      <div class="dash-panel"><h3 class="panel-title">Tasks due this week</h3><div id="dueThisWeek"></div></div>
-    </div>
+  <section id="tab-learning" class="tab-pane" style="display:none">
+    <div id="learningContainer"></div>
   </section>
 
   <section id="tab-visitprep" class="tab-pane" style="display:none">
@@ -330,6 +322,67 @@
   </div>
 </div>
 
+<!-- Shared datalist for category autocomplete across all three Learning modals -->
+<datalist id="learningCategoriesDatalist"></datalist>
+
+<!-- Learning: Upload file modal -->
+<div class="modal-backdrop" id="learningUploadModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title">📁 Upload learning file</div><button class="modal-close" onclick="closeUploadFileModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>File</label><input type="file" id="luFile" onchange="onLearningFileSelected()"></div>
+      <div class="field"><label>Title *</label><input id="luTitle" placeholder="e.g., Cold call script v2"></div>
+      <div class="field"><label>Category *</label><input id="luCategory" list="learningCategoriesDatalist" placeholder="Cold Call, Industry, Product, App Usage…"></div>
+      <div class="field"><label>Description (optional)</label><textarea id="luDescription" rows="3" placeholder="What is this for? When to use it?"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" onclick="closeUploadFileModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveUploadFile()">Upload</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Learning: Add link modal -->
+<div class="modal-backdrop" id="learningLinkModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title">🔗 Add learning link</div><button class="modal-close" onclick="closeAddLinkModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>URL *</label><input id="llUrl" placeholder="https://www.youtube.com/watch?v=..."></div>
+      <div class="field"><label>Title *</label><input id="llTitle" placeholder="e.g., Sales objection handling video"></div>
+      <div class="field"><label>Category *</label><input id="llCategory" list="learningCategoriesDatalist" placeholder="Cold Call, Industry, Product, App Usage…"></div>
+      <div class="field"><label>Description (optional)</label><textarea id="llDescription" rows="3" placeholder="What is this for? When to use it?"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" onclick="closeAddLinkModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveAddLink()">Add link</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Learning: Edit metadata modal (file/URL itself can't be edited inline) -->
+<div class="modal-backdrop" id="learningEditModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title">✏️ Edit learning item</div><button class="modal-close" onclick="closeEditLearningModal()">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="leId">
+      <div class="field"><label>Title *</label><input id="leTitle"></div>
+      <div class="field"><label>Category *</label><input id="leCategory" list="learningCategoriesDatalist"></div>
+      <div class="field"><label>Description</label><textarea id="leDescription" rows="3"></textarea></div>
+      <p style="font-size:12px;color:var(--ink-mute);margin-top:8px">To replace the file or URL itself, delete this item and re-upload/re-add.</p>
+    </div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" onclick="closeEditLearningModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditLearning()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <button id="chatFab" title="Maple Assistant">💬</button>
@@ -359,8 +412,8 @@
 <script src="js/tasks.js"></script>
 <script src="js/companies.js"></script>
 <script src="js/visits.js"></script>
-<script src="js/dashboard.js"></script>
 <script src="js/visitprep.js"></script>
+<script src="js/learning.js"></script>
 <script src="js/app.js"></script>
 <script src="js/chat.js"></script>
 </body>

@@ -87,6 +87,24 @@ async function ensureVisitPrepSheet() {
   console.log('Created VisitPrep sheet with headers');
 }
 
+// Auto-create the Documents sheet tab if it doesn't exist. Mirrors the VisitPrep pattern.
+// Used by the Learning tab.
+async function ensureDocumentsSheet() {
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
+  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
+  const meta = await metaResp.json();
+  if (meta.sheets.some(function(s) { return s.properties.title === 'Documents'; })) return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'Documents' } } }] })
+  });
+  // Write headers — range is dynamic based on DOCUMENT_COLS length
+  const endCol = colLetter(DOCUMENT_COLS.length);
+  await sheetsWrite(`Documents!A1:${endCol}1`, [DOCUMENT_COLS]);
+  console.log('Created Documents sheet with headers');
+}
+
 async function pullAll() {
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -95,18 +113,21 @@ async function pullAll() {
     await ensureDeletedSheet();
 
     await ensureVisitPrepSheet();
-    const [tRows, cRows, vRows, dRows, vpRows] = await Promise.all([
+    await ensureDocumentsSheet();
+    const [tRows, cRows, vRows, dRows, vpRows, docRows] = await Promise.all([
       sheetsRead('Tasks!A2:Z'),
       sheetsRead('Companies!A2:Z'),
       sheetsRead('Visits!A2:Z'),
       sheetsRead('Deleted!A2:Z').catch(function() { return []; }),
       sheetsRead('VisitPrep!A2:Z').catch(function() { return []; }),
+      sheetsRead('Documents!A2:Z').catch(function() { return []; }),
     ]);
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
     state.visits = vRows.filter(r=>r[0]).map(r=>rowToObj(r, VISIT_COLS));
     state.deleted = dRows.filter(r=>r[0]).map(r=>rowToObj(r, DELETED_COLS));
     state.visitPreps = vpRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, VISITPREP_COLS);});
+    state.documents = docRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, DOCUMENT_COLS);});
     cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     autoArchiveOldDone();

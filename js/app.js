@@ -4,25 +4,22 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-pane').forEach(p => p.style.display = 'none');
   document.getElementById('tab-'+name).style.display = 'block';
-  if(name==='dashboard') renderDashboard();
-  else if(name==='companies') renderCompanies();
+  if(name==='companies') renderCompanies();
   else if(name==='archive') renderArchive();
   else if(name==='visitprep') renderVisitPrep();
-  else if(name==='library') renderLibrary();
+  else if(name==='learning') renderLearning();
   else renderTaskView();
 }
 function refreshAll() {
-  populateFilterOptions(); renderTaskView(); renderCompanies(); renderDashboard();
+  populateFilterOptions(); renderTaskView(); renderCompanies();
   refreshOverdueAlert(); refreshTaskCount();
   if (typeof refreshReviewAlert === 'function') refreshReviewAlert();  // review dot on Tasks tab
   document.getElementById('countCompanies').textContent = state.companies.length;
   document.getElementById('countArchive').textContent = state.deleted.length;
-  // Library badge + conditional re-render if we're on the tab
-  if (typeof renderLibrary === 'function') {
-    const libCount = document.getElementById('countLibrary');
-    if (libCount) libCount.textContent = (state.documents || []).length;
-    if (state.currentTab === 'library') renderLibrary();
-  }
+  // Learning badge + conditional re-render if we're on the tab
+  const learningCount = document.getElementById('countLearning');
+  if (learningCount) learningCount.textContent = (state.documents || []).length;
+  if (state.currentTab === 'learning' && typeof renderLearning === 'function') renderLearning();
   if(state.currentTab === 'visitprep') renderVisitPrep();
   if(state.currentTab === 'archive') renderArchive();
   const overdueCount = getOverdueTasks().length;

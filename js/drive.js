@@ -223,3 +223,33 @@ async function handleVPItemFileUpload(fileList, companyName, itemKey, containerI
     toast('Upload failed: ' + e.message, true);
   }
 }
+
+// ===== LEARNING (DOCUMENTS) =====
+// Folders are organized as Learning/<category>/. URL-only items don't create Drive
+// entries — only file uploads do. Categories are sanitized to safe folder names.
+async function getLearningRootFolder() {
+  const rootId = await getMapleRootFolder();
+  return await findOrCreateFolder('Learning', rootId);
+}
+
+async function getLearningCategoryFolder(category) {
+  const learningRoot = await getLearningRootFolder();
+  // Sanitize category name to a safe folder name. Drive accepts most chars but we
+  // strip risky ones and trim length to keep folders tidy.
+  const safeCategory = (category || 'Uncategorized').replace(/[\\/]/g, '-').substring(0, 80) || 'Uncategorized';
+  return await findOrCreateFolder(safeCategory, learningRoot);
+}
+
+// Move a Drive file to trash (not permanent delete — recoverable from Drive UI for ~30 days).
+// Used by the Learning tab when deleting file-type items.
+async function deleteDriveFile(fileId) {
+  if (!fileId || !accessToken) return;
+  const r = await fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId), {
+    method: 'DELETE',
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  // 204 = success, 404 = already gone (treat as success). Anything else is an error.
+  if (!r.ok && r.status !== 404) {
+    throw new Error('Drive delete failed: ' + r.status);
+  }
+}

@@ -1,4 +1,4 @@
-/* chat.js — Chat agent v5: 15 tools + bulk import + meeting mode (batch task extraction) */
+/* chat.js — Chat agent v5: 18 tools (15 core + 3 learning) + bulk import + meeting mode */
 
 (function chatInit() {
   const fab = document.getElementById("chatFab");
@@ -725,6 +725,53 @@
           openTasks: state.tasks.filter(function(t) { return t.status !== 'Done'; }).length,
           overdueCount: state.tasks.filter(function(t) { return t.date && new Date(t.date) < today && t.status !== 'Done'; }).length };
         return { summary: JSON.stringify(r) };
+      }
+      // ===== LEARNING TAB TOOLS =====
+      // Only URL-type items can be added via chat (file uploads need the UI).
+      case "add_learning_item": {
+        if (!args.url || !args.title || !args.category) {
+          throw new Error("url, title, and category are required");
+        }
+        if (!/^https?:\/\//i.test(args.url)) {
+          throw new Error("url must start with http:// or https://");
+        }
+        const doc = {
+          id: newId('DOC'), title: args.title, type: 'url', category: args.category,
+          description: args.description || '', url: args.url,
+          driveFileId: '', driveLink: '', mimeType: '',
+          uploadedBy: getCurrentUser(), uploadedAt: nowIso(), updatedAt: nowIso()
+        };
+        state.documents.push(doc);
+        await upsertRow(SHEET_TABS.documents, DOCUMENT_COLS, doc);
+        return { summary: 'Added link "' + doc.title + '" to ' + doc.category, id: doc.id, title: doc.title };
+      }
+      case "search_learning": {
+        const q = (args.query || '').toLowerCase();
+        const cat = args.category || '';
+        const matches = (state.documents || []).filter(function(d) {
+          if (cat && d.category !== cat) return false;
+          if (q) {
+            const hay = ((d.title || '') + ' ' + (d.description || '') + ' ' + (d.category || '')).toLowerCase();
+            if (hay.indexOf(q) === -1) return false;
+          }
+          return true;
+        }).slice(0, 20).map(function(d) {
+          return { id: d.id, title: d.title, type: d.type, category: d.category,
+                   url: d.type === 'url' ? d.url : d.driveLink, description: d.description };
+        });
+        return { summary: 'Found ' + matches.length + ' learning item' + (matches.length === 1 ? '' : 's'), results: matches };
+      }
+      case "delete_learning_item": {
+        if (!args.id) throw new Error("id is required");
+        const d = (state.documents || []).find(function(x) { return x.id === args.id; });
+        if (!d) throw new Error("Learning item not found: " + args.id);
+        // For file-type items, move the Drive file to trash. URL-type just removes the row.
+        if (d.type === 'file' && d.driveFileId) {
+          await deleteDriveFile(d.driveFileId);
+        }
+        await deleteRowById(SHEET_TABS.documents, d.id);
+        state.documents = state.documents.filter(function(x) { return x.id !== d.id; });
+        return { summary: 'Deleted "' + (d.title || 'item') + '"' + (d.type === 'file' ? ' (file moved to Drive trash)' : '') };
       }
       case "add_company": {
         const notesParts = []; if (args.notes) notesParts.push(args.notes); if (args.contactTitle) notesParts.push("Title: " + args.contactTitle);

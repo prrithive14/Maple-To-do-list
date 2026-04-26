@@ -5,7 +5,7 @@ const APP_CONFIG = {
   calendarId: 'primary'
 };
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
-const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep' };
+const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep', documents: 'Documents' };
 // Tasks sheet now includes review fields (columns N, O, P). Existing tasks with empty values = "no review".
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory'];
 // Deleted sheet mirrors Tasks + archive fields + same review fields so archived tasks keep their review history
@@ -13,6 +13,10 @@ const DELETED_COLS = ['id','name','status','priority','date','duration','assigne
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
 const VISITPREP_COLS = ['id','companyId','checks','notes','leadRating','visitDate','updatedAt'];
+// Documents sheet — Learning tab. Each row is either a file (driveFileId/driveLink populated) OR a URL (url populated). type='file'|'url'.
+const DOCUMENT_COLS = ['id','title','type','category','description','url','driveFileId','driveLink','mimeType','uploadedBy','uploadedAt','updatedAt'];
+// Seed categories shown in the Learning sidebar even when no documents exist yet. Free-text — users can add new ones via the upload modal.
+const LEARNING_SEED_CATEGORIES = ['Cold Call', 'Industry', 'Product', 'App Usage'];
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
 const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 

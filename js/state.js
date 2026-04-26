@@ -1,8 +1,10 @@
 /* state.js — App state, cache, and utility functions */
 
 let state = {
-  companies: [], visits: [], tasks: [], deleted: [], visitPreps: [],
+  companies: [], visits: [], tasks: [], deleted: [], visitPreps: [], documents: [],
   view: 'table', taskScope: 'personal', taskView: 'kanban', currentTab: 'tasks',
+  // Learning tab — currently selected category. Empty string means "All".
+  currentLearningCategory: '',
   // Assignee filter: 'me' = current user's tasks (default), 'all' = everyone,
   // 'Prrithive' / 'Sridharan' / 'Both' / 'unassigned' = specific filters.
   // Default 'me' is set on sign-in once we know who the user is — see auth.js.
@@ -34,6 +36,7 @@ function tabKeyForName(tab) {
   if(tab===SHEET_TABS.visits) return 'visits';
   if(tab===SHEET_TABS.deleted) return 'deleted';
   if(tab===SHEET_TABS.visitprep) return 'visitPreps';
+  if(tab===SHEET_TABS.documents) return 'documents';
 }
 
 // ===== USER IDENTITY =====
@@ -108,11 +111,11 @@ function resetApp() {
 }
 
 function cacheLocal() {
-  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, visitPreps: state.visitPreps, when: Date.now() }));
+  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, visitPreps: state.visitPreps, documents: state.documents, when: Date.now() }));
 }
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
-    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; }
+    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; state.documents = c.documents||[]; }
   } catch(e){}
 }
