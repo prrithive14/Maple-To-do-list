@@ -31,7 +31,10 @@ async function restoreTask(taskId) {
 }
 
 async function autoArchiveOldDone() {
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 7);
+  // Auto-archive Done tasks older than 2 days. Done tasks within the buffer stay
+  // visible in the kanban so recently-completed work can still be reviewed/undone.
+  // To restore an archived task, use the Archive tab → Restore button.
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 2);
   const cutoffStr = cutoff.toISOString();
   const toArchive = state.tasks.filter(t => t.status === 'Done' && t.updatedAt && t.updatedAt < cutoffStr);
   if (toArchive.length === 0) return;
@@ -65,7 +68,7 @@ function renderArchive() {
     return true;
   }).sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
   if (filtered.length === 0) {
-    root.innerHTML = '<div class="empty"><h3>No archived tasks</h3><p>Completed tasks auto-archive after 7 days. Deleted tasks also appear here.</p></div>'; return;
+    root.innerHTML = '<div class="empty"><h3>No archived tasks</h3><p>Completed tasks auto-archive after 2 days. Deleted tasks also appear here.</p></div>'; return;
   }
   root.innerHTML = `<div class="company-table"><table>
     <thead><tr><th>Task</th><th>Status</th><th>Reason</th><th>Archived</th><th>Due date</th><th>Company</th><th></th></tr></thead>
