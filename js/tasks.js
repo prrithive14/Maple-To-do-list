@@ -137,6 +137,15 @@ function renderCard(t) {
   // data-priority drives the colored left-border in styles.css.
   // Empty string = no border (matches tasks with no priority set).
   const prio = t.priority || '';
+  // Attachment indicators on the card. The links field is a free-text field that may
+  // contain the magic marker 'drive-attached' (added by drive.js when a file is uploaded
+  // to the task) and/or actual URL/link text. We surface them as separate icons so
+  // 📁 always means "files attached" and 🔗 always means "other links / URLs".
+  const linksField = t.links || '';
+  const hasFiles = linksField.indexOf('drive-attached') !== -1;
+  // Strip the marker (and any surrounding ' | ' separator) to see if there's anything else.
+  const otherLinks = linksField.replace(/\s*\|\s*drive-attached/g, '').replace(/^drive-attached\s*\|?\s*/, '').replace(/^drive-attached$/, '').trim();
+  const hasOtherLinks = otherLinks.length > 0;
   return `<div class="card" data-priority="${esc(prio)}" draggable="true" ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)" onclick="openTaskModal('${t.id}')">
     <div class="card-title">${esc(t.name)}</div>
     <div class="card-meta">
@@ -145,7 +154,7 @@ function renderCard(t) {
       ${company?`<span class="pill pill-company">🏢 ${esc(company.name)}</span>`:''}
       ${reviewPill}
       ${t.date?`<span class="card-date ${overdue?'overdue':''}">${formatDate(t.date)}</span>`:''}
-      ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}${t.links?`<span class="card-date">📎</span>`:''}
+      ${t.assignee?`<span class="card-date">· ${esc(t.assignee)}</span>`:''}${hasFiles?`<span class="card-date" title="Has attached files">📁</span>`:''}${hasOtherLinks?`<span class="card-date" title="Has links">🔗</span>`:''}
     </div></div>`;
 }
 
