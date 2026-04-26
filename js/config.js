@@ -17,6 +17,11 @@ const VISITPREP_COLS = ['id','companyId','checks','notes','leadRating','visitDat
 const DOCUMENT_COLS = ['id','title','type','category','description','url','driveFileId','driveLink','mimeType','uploadedBy','uploadedAt','updatedAt'];
 // Seed categories shown in the Learning sidebar even when no documents exist yet. Free-text — users can add new ones via the upload modal.
 const LEARNING_SEED_CATEGORIES = ['Cold Call', 'Industry', 'Product', 'App Usage'];
+// Common categories shown at the top of the task category dropdown for fast picking.
+// The category field is still free-text — type anything new and it'll be saved as-is.
+// Categories that exist on tasks but aren't in this list (e.g., "PR Application") will
+// still appear in the dropdown after the common ones, so existing tasks aren't affected.
+const COMMON_TASK_CATEGORIES = ['Admin', 'Personal', 'Sales', 'Learning', 'Marketing', 'Other'];
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
 const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 

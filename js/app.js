@@ -36,11 +36,26 @@ function refreshTaskCount() {
   document.getElementById('countTasks').textContent = scopedCount;
 }
 function populateFilterOptions() {
-  const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
+  // Categories actually used in existing tasks
+  const usedCats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
+
+  // Filter dropdown ("All categories ▾") — only shows what's actually in use,
+  // since filtering by an empty category yields zero results.
   const sel = document.getElementById('filterCategory');
   const cur = sel.value;
-  sel.innerHTML = '<option value="">All categories</option>' + cats.map(c=>`<option>${esc(c)}</option>`).join('');
+  sel.innerHTML = '<option value="">All categories</option>' + usedCats.map(c=>`<option>${esc(c)}</option>`).join('');
   sel.value = cur;
+
+  // Task modal datalist — common categories first (always visible for fast picking),
+  // then any other categories that exist in the data but aren't in COMMON_TASK_CATEGORIES.
+  // Free-text input is preserved — users can type anything and it saves as-is.
+  const dl = document.getElementById('categoryOptions');
+  if (dl) {
+    const common = (typeof COMMON_TASK_CATEGORIES !== 'undefined' ? COMMON_TASK_CATEGORIES : []);
+    const extra = usedCats.filter(c => common.indexOf(c) === -1);
+    dl.innerHTML = common.concat(extra).map(c => `<option value="${esc(c)}">`).join('');
+  }
+
   const compSel = document.getElementById('filterCompany');
   const tCompSel = document.getElementById('tCompany');
   const compOpts = state.companies.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
