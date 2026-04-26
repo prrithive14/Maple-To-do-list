@@ -9,6 +9,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css">
+<script>
+  // Apply theme BEFORE paint to avoid flash of light theme on load.
+  // Default: dark (per Prrithive + Sridharan preference). Toggle persists in localStorage.
+  (function(){
+    var saved = localStorage.getItem('maple_theme');
+    var theme = saved || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
 </head>
 <body>
 
@@ -38,6 +47,7 @@
     <div class="header-actions">
       <div id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">Not signed in</span></div>
       <button id="signInBtn" class="btn" onclick="googleSignIn()">Sign in with Google</button>
+      <button id="themeToggle" class="btn btn-ghost" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
       <button class="btn btn-ghost" onclick="openSettings()" title="Settings">⚙</button>
     </div>
   </div>

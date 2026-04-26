@@ -50,8 +50,25 @@ function populateFilterOptions() {
   compSel.innerHTML = '<option value="">All companies</option>' + compOpts;
   tCompSel.innerHTML = '<option value="">— None —</option>' + compOpts;
 }
-function initApp() { showApp(); loadCache(); refreshAll(); initAuth(); }
+function initApp() { showApp(); loadCache(); refreshAll(); initAuth(); applyTheme(); }
 function forceSync() { if(accessToken) pullAll(); else toast('Sign in first', true); }
+
+// ===== THEME (light/dark) =====
+// Theme is applied pre-paint by the inline script in index.html (reads localStorage,
+// defaults to 'dark'). These functions handle runtime toggling and keep the button
+// icon in sync with the active theme.
+function applyTheme() {
+  var theme = document.documentElement.getAttribute('data-theme') || 'dark';
+  var btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = (theme === 'dark') ? '☀️' : '🌙';
+}
+function toggleTheme() {
+  var current = document.documentElement.getAttribute('data-theme') || 'dark';
+  var next = (current === 'dark') ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('maple_theme', next);
+  applyTheme();
+}
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;

@@ -758,3 +758,126 @@ html.test-env .brand h1::after {
   letter-spacing: 0.06em;
   transform: translateY(-2px);
 }
+
+/* ============================================================
+   DARK THEME — GitHub-style soft charcoal
+   Activated by setting <html data-theme="dark">.
+   Rebinds CSS variables and overrides hardcoded light values.
+   ============================================================ */
+
+html[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-sunken: #1c2129;
+  --ink: #e6edf3;
+  --ink-soft: #b1bac4;
+  --ink-mute: #8b949e;
+  --line: #30363d;
+  --line-soft: #21262d;
+  /* Accent stays — Maple's brand orange. Slightly brighter for contrast on dark bg. */
+  --accent: #d97548;
+  --accent-soft: #e89066;
+  /* Status colors slightly desaturated/lifted for dark backgrounds */
+  --green: #6fb070;
+  --yellow: #e0b14a;
+  --red: #e07b5a;
+  --blue: #6a93b8;
+  --purple: #9b7ab8;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
+  --shadow-lg: 0 4px 8px rgba(0,0,0,.5), 0 16px 32px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+
+/* Header backdrop — matches dark page bg with translucency */
+html[data-theme="dark"] .header { background: rgba(13,17,23,.92); }
+
+/* Modal backdrop — darker overlay for dark mode */
+html[data-theme="dark"] .modal-backdrop { background: rgba(0,0,0,.65); }
+
+/* Primary button hover — adjust for darker accent */
+html[data-theme="dark"] .btn-primary:hover { background: #b8451f; border-color: #b8451f; }
+
+/* Danger button hover — soft red tint instead of light pink */
+html[data-theme="dark"] .btn-danger:hover { background: rgba(224,123,90,.12); }
+
+/* Overdue banner — dark-friendly red panel */
+html[data-theme="dark"] .overdue-banner {
+  background: rgba(224,123,90,.10);
+  border-color: rgba(224,123,90,.35);
+  color: #f0a088;
+}
+html[data-theme="dark"] .overdue-banner button { background: var(--red); color: #fff; }
+html[data-theme="dark"] .overdue-banner button:hover { background: #b85a3d; }
+
+/* Category pills — translucent tinted backgrounds for dark mode */
+html[data-theme="dark"] .pill-cat-Sales      { background: rgba(111,176,112,.12); color: #8ac88c; border-color: rgba(111,176,112,.30); }
+html[data-theme="dark"] .pill-cat-Marketing  { background: rgba(155,122,184,.12); color: #b89cd1; border-color: rgba(155,122,184,.30); }
+html[data-theme="dark"] .pill-cat-Admin      { background: rgba(106,147,184,.12); color: #8aabcc; border-color: rgba(106,147,184,.30); }
+html[data-theme="dark"] .pill-cat-PR         { background: rgba(224,177,74,.12);  color: #e8c478; border-color: rgba(224,177,74,.30); }
+html[data-theme="dark"] .pill-cat-Personal   { background: rgba(224,123,90,.12);  color: #f0a088; border-color: rgba(224,123,90,.30); }
+html[data-theme="dark"] .pill-cat-Learning   { background: rgba(180,140,80,.12);  color: #c9a577; border-color: rgba(180,140,80,.30); }
+html[data-theme="dark"] .pill-company        { background: rgba(155,122,184,.12); color: #b89cd1; border-color: rgba(155,122,184,.30); }
+
+/* Status pills — same translucent treatment */
+html[data-theme="dark"] .status-Visited { background: rgba(106,147,184,.14); color: #8aabcc; border-color: rgba(106,147,184,.30); }
+html[data-theme="dark"] .status-Quoted  { background: rgba(224,177,74,.14);  color: #e8c478; border-color: rgba(224,177,74,.30); }
+html[data-theme="dark"] .status-Won     { background: rgba(111,176,112,.14); color: #8ac88c; border-color: rgba(111,176,112,.30); }
+html[data-theme="dark"] .status-Lost    { background: rgba(224,123,90,.14);  color: #f0a088; border-color: rgba(224,123,90,.30); }
+
+/* View toggle active button — invert to accent so it reads on dark */
+html[data-theme="dark"] .view-toggle button.active { background: var(--accent); color: #fff; }
+
+/* Toast — keep dark, just adjust contrast */
+html[data-theme="dark"] .toast { background: #21262d; color: var(--ink); border: 1px solid var(--line); }
+
+/* Filter select dropdown arrow — needs lighter color on dark bg */
+html[data-theme="dark"] .filter-select {
+  background: var(--bg-card) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23b1bac4' stroke-width='1.2' fill='none'/></svg>") no-repeat right 10px center;
+}
+
+/* File upload zones — replace warm cream hover with dark accent tint */
+html[data-theme="dark"] .file-upload-zone:hover,
+html[data-theme="dark"] .file-upload-zone.dragging { background: rgba(217,117,72,.08); }
+
+/* Calendar drag-drop target */
+html[data-theme="dark"] .cal-day.cal-drop-target { background: rgba(217,117,72,.12); }
+
+/* Chat assistant — dark-friendly bubbles */
+html[data-theme="dark"] #chatHeader { background: #21262d; color: var(--ink); border-bottom: 1px solid var(--line); }
+html[data-theme="dark"] #chatHeader button { color: var(--ink); }
+html[data-theme="dark"] .chatMsg.action {
+  background: rgba(111,176,112,.10); color: #8ac88c; border-color: rgba(111,176,112,.30);
+}
+html[data-theme="dark"] .chatMsg.error {
+  background: rgba(224,123,90,.10); color: #f0a088; border-color: rgba(224,123,90,.30);
+}
+
+/* Library "active" category pill keeps the accent — no override needed */
+
+/* Form inputs — explicit dark backgrounds (some browsers default to white) */
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+  background: var(--bg-sunken);
+  color: var(--ink);
+  border-color: var(--line);
+}
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] textarea:focus { border-color: var(--accent); outline: none; }
+
+/* Autofill override — Chrome forces white-on-yellow autofill, kill it */
+html[data-theme="dark"] input:-webkit-autofill,
+html[data-theme="dark"] input:-webkit-autofill:hover,
+html[data-theme="dark"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-sunken) inset;
+  caret-color: var(--ink);
+}
+
+/* Test env banner — keep its bright orange, but tweak header bg for dark mode */
+html[data-theme="dark"].test-env .header { background: rgba(45,30,10,.92); border-bottom-color: #d97706; }
+
+/* Theme toggle button — subtle hover */
+#themeToggle { font-size: 16px; line-height: 1; }
+html[data-theme="dark"] #themeToggle { color: #e0b14a; }
