@@ -20,7 +20,7 @@ Google Sheets-backed CRM and task management web app for a family machinery part
 | OAuth Client ID | `43641250256-l4ki5l2lfvadbsmju4juh0fln91aib09` |
 | Drive root folder ID | `13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM` |
 
-**Sheet tabs:** `Companies`, `Visits`, `Tasks`, `Deleted`, `VisitPrep`, `Documents`
+**Sheet tabs:** `Companies`, `Visits`, `Tasks`, `Deleted`, `VisitPrep`, `Documents`, `DailyLog`
 
 **Worker:** Uses Claude Sonnet via Anthropic API with prompt caching enabled. Two-block system array — main prompt stays cache-friendly, meeting-mode addendum appended only when `mode === "meeting"`.
 
@@ -48,6 +48,8 @@ js/
   dashboard.js          Dashboard tab — pipeline, stats, user plate
   chat.js               Chat agent UI, tool execution, meeting mode, batch confirmation
   library.js            Training document Library (Documents sheet, dynamic categories)
+  dailyLog.js           Daily Log CRUD, detail modal, quick-add parser (per-user time blocks)
+  dailyLogCalendar.js   Day/Week/Month calendar renderer + efficiency badge for Daily Log
 worker.js               Cloudflare Worker (deployed separately, calls Anthropic API)
 ```
 
@@ -77,6 +79,14 @@ Column lists must stay in sync between `config.js` and the Sheet headers — ord
 `id, name, status, priority, date, duration, assignee, category, companyId, notes, links, createdAt, updatedAt, reviewer, reviewStatus, reviewHistory, archivedAt, archiveReason`
 
 - `archiveReason`: `completed` (auto, 2-day rule) | `manual` | `deleted`
+
+### DailyLog
+`id, date, startTime, endTime, title, done, comment, createdAt, createdBy, updatedAt, updatedBy`
+
+- `date`: `YYYY-MM-DD`
+- `startTime`/`endTime`: `HH:mm` (24h); `endTime` must be after `startTime`
+- `done`: stored as `"TRUE"` | `"FALSE"` (sheets returns strings; `logDoneBool` normalises)
+- `createdBy`/`updatedBy`: **lowercased raw OAuth email** (not role name) — used to scope every view to the signed-in user. Daily Log is personal; nobody sees anyone else's entries.
 
 ### VisitPrep
 `id, companyId, checks, notes, leadRating, visitDate, updatedAt`
@@ -132,12 +142,22 @@ Everything in this list is live in production.
 - Categories: free-text with datalist autocomplete, seeded via `LIBRARY_SEED_CATEGORIES` in `config.js`
 - Known v1 limitation: renaming category in metadata does NOT physically move the file in Drive
 
+### Daily Log
+- Google-Calendar-style time grid (6am → midnight) with Week (default) / Day / Month toggles
+- Each block: title, start/end time, done checkbox in top-right, click body to open detail modal (edit/delete)
+- Quick-add bar parses `"Gym 6-8pm"`, `"Call Dad 14:30-15:00"`, `"Lunch 12-1pm"`, `"Read 9am-10:30am"`; unparseable input opens the modal pre-filled
+- Click an empty slot in the column → modal pre-filled with that date & 15-min-snapped start
+- Efficiency badge at the top of the view: `"X/Y ticked · Z%"`, scoped to the currently visible range
+- Done entries render dimmed + strikethrough; overlapping blocks split side-by-side
+- **Per-user filter:** every view filters on `createdBy === lowercased OAuth email`; chat tool `query_log` does the same. No UI toggle — always personal.
+
 ### Chat agent
-- 15 tools: add/update/delete task and company, bulk ops, query, briefing, stats, log visit, bulk import, request_review, respond_to_review
+- 19 tools (15 core + 3 Learning + 4 Daily Log): add/update/delete task and company, bulk ops, query, briefing, stats, log visit, bulk import, request_review, respond_to_review, learning CRUD, daily-log CRUD
 - **Meeting mode:** pasted notes parsed into proposed task batch; user reviews/edits before tasks are created
 - Two-block system array keeps main prompt cache-friendly
 - Client defers all `add_task` tool calls in meeting mode
-- `update_task`/`update_company` have field whitelists
+- `update_task`/`update_company`/`update_log_entry` have field whitelists
+- Daily-Log tools (`add_log_entry`, `tick_log_entry`, `update_log_entry`, `query_log`) ignore any `createdBy` in the tool args and always use the signed-in user's email server-side. `tick_log_entry`/`update_log_entry` reject IDs owned by another user.
 - `get_stats` uses midnight-today as cutoff
 - Cascade delete for companies works in both UI and chat tool
 
@@ -221,6 +241,13 @@ Pattern A — two separate GitHub repos with separate `config.js`, separate test
 - `refreshAll()` performance at scale
 - Mask OAuth Client ID / Sheet ID in Settings dialog (Risk 3 follow-up — currently Settings is hidden but contents are visible to authorized users)
 
+**Daily Log v1 — deferred to backlog:**
+- Recurring templates (e.g., "Gym every Mon/Wed/Fri 6-7am")
+- Drag-to-resize blocks (currently edit times via modal)
+- Two-way calendar sync (Daily Log is local-only; Tasks already has one-way)
+- Mobile-specific layout (current responsive rules degrade for narrow screens but aren't tuned for phone use)
+- Shared/team view — Daily Log is intentionally per-user
+
 **Explicitly deferred:**
 - Zoho Mail integration
 
@@ -237,7 +264,8 @@ Pattern A — two separate GitHub repos with separate `config.js`, separate test
 ### Hard-won technical lessons
 - **`encodeURIComponent` was encoding the colon in Sheets range strings** (e.g., `A2:O`). All such calls were removed from `sheets.js`. Don't add them back.
 - **Appending CSS carelessly can overwrite the entire file.** Always verify file operation mode (append vs. overwrite) before running.
-- **Header ranges in `ensureDeletedSheet`/`ensureVisitPrepSheet` must be dynamic** based on `*_COLS.length` — hardcoding column letters caused the April 19 VisitPrep bug.
+- **Header ranges in `ensureDeletedSheet`/`ensureVisitPrepSheet`/`ensureDailyLogSheet` must be dynamic** based on `*_COLS.length` — hardcoding column letters caused the April 19 VisitPrep bug. `ensureDailyLogSheet` follows the same pattern.
+- **Daily Log entries are per-user.** Every renderer and the `query_log` chat tool filter on `createdBy === state.currentEmail` (lowercased). `tick_log_entry` and `update_log_entry` additionally reject IDs whose `createdBy` doesn't match — defence in depth so a model hallucinating someone else's ID can't mutate it.
 - **Deleted sheet auto-create:** ran into a duplicate-sheet bug previously, fully fixed when `id` column was added and ranges made dynamic.
 - **Drive scope must be `drive`, not `drive.file`** — the latter only sees app-created files and broke shared folder operations.
 - **Identity check uses `userinfo.email` scope.** `USER_EMAILS` keys must be lowercased (the lookup lowercases the OAuth email before matching).
@@ -268,3 +296,5 @@ Pattern A — two separate GitHub repos with separate `config.js`, separate test
 ---
 
 *Last updated: April 26, 2026 — added: dark mode, allowlist enforcement, Settings hiding, "My tasks" default, priority borders, 2-day archive cutoff, security model section.*
+
+*May 11, 2026 — added Daily Log: per-user calendar-style time-block tracker with Day/Week/Month views, quick-add parser, efficiency badge, and 4 chat-agent tools. New `DailyLog` sheet tab. Worker schemas for the 4 new tools must be deployed to `worker.js` separately — see session notes.*

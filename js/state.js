@@ -1,8 +1,10 @@
 /* state.js — App state, cache, and utility functions */
 
 let state = {
-  companies: [], visits: [], tasks: [], deleted: [], visitPreps: [], documents: [],
+  companies: [], visits: [], tasks: [], deleted: [], visitPreps: [], documents: [], dailyLog: [],
   view: 'table', taskScope: 'personal', taskView: 'kanban', currentTab: 'tasks',
+  // Daily Log view state — week is default, calendar starts on the Monday of the current week.
+  dailyLogView: 'week', dailyLogAnchor: null,
   // Learning tab — currently selected category. Empty string means "All".
   currentLearningCategory: '',
   // Assignee filter: 'me' = current user's tasks (default), 'all' = everyone,
@@ -37,6 +39,7 @@ function tabKeyForName(tab) {
   if(tab===SHEET_TABS.deleted) return 'deleted';
   if(tab===SHEET_TABS.visitprep) return 'visitPreps';
   if(tab===SHEET_TABS.documents) return 'documents';
+  if(tab===SHEET_TABS.dailylog) return 'dailyLog';
 }
 
 // ===== USER IDENTITY =====
@@ -111,11 +114,11 @@ function resetApp() {
 }
 
 function cacheLocal() {
-  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, visitPreps: state.visitPreps, documents: state.documents, when: Date.now() }));
+  localStorage.setItem('maple_cache', JSON.stringify({ tasks: state.tasks, companies: state.companies, visits: state.visits, deleted: state.deleted, visitPreps: state.visitPreps, documents: state.documents, dailyLog: state.dailyLog, when: Date.now() }));
 }
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
-    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; state.documents = c.documents||[]; }
+    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; state.documents = c.documents||[]; state.dailyLog = c.dailyLog||[]; }
   } catch(e){}
 }

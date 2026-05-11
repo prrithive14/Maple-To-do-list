@@ -8,6 +8,7 @@ function switchTab(name) {
   else if(name==='archive') renderArchive();
   else if(name==='visitprep') renderVisitPrep();
   else if(name==='learning') renderLearning();
+  else if(name==='dailylog') renderDailyLog();
   else renderTaskView();
 }
 function refreshAll() {
@@ -20,6 +21,10 @@ function refreshAll() {
   const learningCount = document.getElementById('countLearning');
   if (learningCount) learningCount.textContent = (state.documents || []).length;
   if (state.currentTab === 'learning' && typeof renderLearning === 'function') renderLearning();
+  // Daily Log badge counts only entries belonging to the signed-in user.
+  const dlCount = document.getElementById('countDailyLog');
+  if (dlCount && typeof getMyLogEntries === 'function') dlCount.textContent = getMyLogEntries().length;
+  if (state.currentTab === 'dailylog' && typeof renderDailyLog === 'function') renderDailyLog();
   if(state.currentTab === 'visitprep') renderVisitPrep();
   if(state.currentTab === 'archive') renderArchive();
   const overdueCount = getOverdueTasks().length;

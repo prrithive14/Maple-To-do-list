@@ -962,3 +962,140 @@ html[data-theme="dark"] #themeToggle { color: #e0b14a; }
 .card[data-priority="Medium"] { border-left: 3px solid var(--yellow); }
 .card[data-priority="Low"]    { border-left: 3px solid var(--ink-mute); }
 /* No data-priority or empty — no special border, falls back to default 1px */
+
+/* ============================================================
+   DAILY LOG — calendar-style time grid (6am → midnight)
+   Uses --accent / --bg-card / --bg-sunken / --line tokens so both
+   themes work via variable rebinding. Block colors are an --accent
+   tint so they read as "yours" without a per-category palette.
+   ============================================================ */
+
+.dl-toolbar { display:flex; align-items:center; gap:12px; margin-bottom:10px; flex-wrap:wrap; }
+.dl-toolbar-left, .dl-toolbar-center, .dl-toolbar-right { display:flex; align-items:center; gap:8px; }
+.dl-toolbar-center { flex:1; justify-content:center; }
+.dl-nav-label { font-family:'Fraunces',serif; font-size:16px; font-weight:600; min-width:200px; text-align:center; }
+.dl-badge {
+  display:inline-block; padding:5px 10px; border-radius:999px;
+  background:var(--bg-sunken); border:1px solid var(--line);
+  font-size:12px; font-weight:600; color:var(--ink-soft);
+}
+.dl-quickadd-row { display:flex; gap:8px; margin-bottom:12px; }
+.dl-quickadd {
+  flex:1; padding:8px 12px; font-size:13px;
+  background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius-md);
+  color:var(--ink);
+}
+.dl-quickadd:focus { outline:none; border-color:var(--accent); }
+
+/* The scrollable container — caps height so the grid scrolls internally. */
+.dl-scroll {
+  background:var(--bg-card); border:1px solid var(--line); border-radius:var(--radius-lg);
+  max-height:calc(100vh - 280px); overflow:auto; position:relative;
+}
+
+/* Week-view headers row, sticky above the grid. */
+.dl-week-headers {
+  display:grid; grid-template-columns:60px repeat(7, 1fr);
+  position:sticky; top:0; z-index:2;
+  background:var(--bg-card); border-bottom:1px solid var(--line);
+}
+.dl-hours-axis-spacer { /* aligns headers above the hour axis */ }
+.dl-day-header {
+  padding:8px 6px; text-align:center; border-left:1px solid var(--line);
+  font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-mute);
+  font-weight:500;
+}
+.dl-day-header.today { color:var(--accent); }
+.dl-day-name { display:block; }
+.dl-day-num { display:block; font-family:'Fraunces',serif; font-size:18px; color:var(--ink); font-weight:600; }
+.dl-day-header.today .dl-day-num { color:var(--accent); }
+
+/* The grid itself: left rail (hour labels) + cols container. */
+.dl-grid { display:grid; }
+.dl-grid-day  { grid-template-columns:60px 1fr; }
+.dl-grid-week { grid-template-columns:60px 1fr; }
+
+.dl-hours-axis {
+  border-right:1px solid var(--line);
+  background:var(--bg-card); position:sticky; left:0; z-index:1;
+}
+.dl-hour-row {
+  font-size:11px; color:var(--ink-mute); padding:2px 6px; text-align:right;
+  border-top:1px solid var(--line); box-sizing:border-box;
+}
+.dl-hour-row:first-child { border-top:none; }
+.dl-hour-row span { display:inline-block; transform:translateY(-7px); }
+
+.dl-cols { position:relative; }
+.dl-cols-week { display:grid; grid-template-columns:repeat(7, 1fr); }
+.dl-col {
+  position:relative; border-left:1px solid var(--line); cursor:cell;
+  background:var(--bg-sunken);
+}
+.dl-grid-day .dl-col { border-left:none; }
+
+/* Faint horizontal hour grid lines, behind the blocks. */
+.dl-hour-line {
+  position:absolute; left:0; right:0; height:1px;
+  background:var(--line); opacity:.6; pointer-events:none;
+}
+
+/* Time blocks: absolutely positioned within their day column. */
+.dl-block {
+  position:absolute; box-sizing:border-box; padding:4px 6px 4px 8px;
+  border-radius:6px; cursor:pointer; overflow:hidden;
+  background:rgba(184,69,31,.10); border:1px solid var(--accent); border-left-width:3px;
+  font-size:12px; color:var(--ink); transition:filter .15s, opacity .15s;
+}
+.dl-block:hover { filter:brightness(1.05); }
+.dl-block-title { font-weight:600; padding-right:18px; line-height:1.25; word-break:break-word; }
+.dl-block-time  { font-size:10px; color:var(--ink-soft); margin-top:2px; }
+.dl-block-tick {
+  position:absolute; top:4px; right:4px; cursor:pointer;
+  width:14px; height:14px; accent-color:var(--accent);
+}
+.dl-block-done { opacity:.55; }
+.dl-block-done .dl-block-title { text-decoration:line-through; }
+
+/* Dark-mode tint for blocks — a touch more visible against the dark surface. */
+html[data-theme="dark"] .dl-block { background:rgba(217,117,72,.18); }
+
+/* MONTH view — compact grid. */
+.dl-month-head {
+  display:grid; grid-template-columns:repeat(7, 1fr);
+  padding:8px 0; border-bottom:1px solid var(--line);
+  position:sticky; top:0; background:var(--bg-card); z-index:2;
+}
+.dl-month-dayhead {
+  text-align:center; font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--ink-mute); font-weight:500;
+}
+.dl-month-grid { display:grid; grid-template-columns:repeat(7, 1fr); }
+.dl-month-cell {
+  min-height:110px; padding:6px; border-top:1px solid var(--line); border-left:1px solid var(--line);
+  cursor:pointer; display:flex; flex-direction:column; gap:3px;
+  background:var(--bg-sunken);
+}
+.dl-month-cell:nth-child(7n) { /* last col has no right border in this layout */ }
+.dl-month-cell.out { opacity:.45; }
+.dl-month-cell.today { background:rgba(184,69,31,.06); }
+html[data-theme="dark"] .dl-month-cell.today { background:rgba(217,117,72,.10); }
+.dl-month-num { font-family:'Fraunces',serif; font-size:14px; font-weight:600; color:var(--ink); }
+.dl-month-cell.today .dl-month-num { color:var(--accent); }
+.dl-month-pill {
+  font-size:11px; padding:2px 6px; border-radius:4px;
+  background:rgba(184,69,31,.10); border-left:2px solid var(--accent);
+  color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  cursor:pointer;
+}
+html[data-theme="dark"] .dl-month-pill { background:rgba(217,117,72,.18); }
+.dl-month-pill.done { opacity:.55; text-decoration:line-through; }
+.dl-month-time { color:var(--ink-soft); font-weight:600; }
+.dl-month-more { font-size:10px; color:var(--ink-mute); padding-left:2px; }
+
+@media (max-width:768px) {
+  .dl-week-headers { grid-template-columns:40px repeat(7, 1fr); }
+  .dl-grid-week, .dl-grid-day { grid-template-columns:40px 1fr; }
+  .dl-block { font-size:11px; }
+  .dl-month-cell { min-height:70px; }
+}

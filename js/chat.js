@@ -22,6 +22,9 @@
 
   const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','companyId','notes','links'];
   const COMPANY_UPDATE_FIELDS = ['name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes'];
+  // Daily Log: whitelisted updatable fields. done is a boolean (we normalise to "TRUE"/"FALSE").
+  // createdBy/createdAt/updatedBy/updatedAt/id are NEVER in the whitelist — those are server-controlled.
+  const LOG_UPDATE_FIELDS = ['date','startTime','endTime','title','done','comment'];
   const DEFAULT_PLACEHOLDER = input.placeholder || "Tell me what to do…";
   const MEETING_PLACEHOLDER = "Paste or dictate your meeting notes. I'll extract action items as tasks.";
 
@@ -787,6 +790,103 @@
         applyWhitelistedUpdates(c, args, COMPANY_UPDATE_FIELDS);
         c.updatedAt = nowIso();
         await upsertRow(SHEET_TABS.companies, COMPANY_COLS, c); return { summary: "Updated " + c.name };
+      }
+      // ===== DAILY LOG TOOLS =====
+      // All four tools are per-user: createdBy/updatedBy come from the signed-in
+      // user's lowercased OAuth email (ignored if the model sends one). query_log
+      // also filters to the current user — Daily Log is a personal record.
+      case "add_log_entry": {
+        const me = (state.currentEmail || '').toLowerCase();
+        if (!me) throw new Error("Not signed in");
+        if (!args.title || !args.date || !args.startTime || !args.endTime) {
+          throw new Error("title, date, startTime, endTime are required");
+        }
+        if (logTimeToMin(args.endTime) <= logTimeToMin(args.startTime)) {
+          throw new Error("endTime must be after startTime");
+        }
+        const entry = {
+          id: newId('LOG'),
+          date: args.date,
+          startTime: args.startTime,
+          endTime: args.endTime,
+          title: args.title,
+          done: (args.done === true || String(args.done).toLowerCase() === 'true') ? 'TRUE' : 'FALSE',
+          comment: args.comment || '',
+          createdAt: nowIso(),
+          createdBy: me,
+          updatedAt: nowIso(),
+          updatedBy: me
+        };
+        state.dailyLog.push(entry);
+        await upsertRow(SHEET_TABS.dailylog, DAILYLOG_COLS, entry);
+        return { summary: 'Logged "' + entry.title + '" ' + entry.date + ' ' + entry.startTime + '–' + entry.endTime, id: entry.id };
+      }
+      case "tick_log_entry": {
+        const me = (state.currentEmail || '').toLowerCase();
+        if (!me) throw new Error("Not signed in");
+        const e = state.dailyLog.find(function(x) { return x.id === args.id; });
+        if (!e) throw new Error("Log entry not found: " + args.id);
+        if ((e.createdBy || '').toLowerCase() !== me) throw new Error("Cannot modify another user's log entry");
+        // If done is provided, set it; otherwise toggle.
+        let nowDone;
+        if (args.done === true || String(args.done).toLowerCase() === 'true') nowDone = true;
+        else if (args.done === false || String(args.done).toLowerCase() === 'false') nowDone = false;
+        else nowDone = !logDoneBool(e.done);
+        e.done = nowDone ? 'TRUE' : 'FALSE';
+        e.updatedAt = nowIso();
+        e.updatedBy = me;
+        await upsertRow(SHEET_TABS.dailylog, DAILYLOG_COLS, e);
+        return { summary: (nowDone ? 'Ticked "' : 'Unticked "') + e.title + '"' };
+      }
+      case "update_log_entry": {
+        const me = (state.currentEmail || '').toLowerCase();
+        if (!me) throw new Error("Not signed in");
+        const e = state.dailyLog.find(function(x) { return x.id === args.id; });
+        if (!e) throw new Error("Log entry not found: " + args.id);
+        if ((e.createdBy || '').toLowerCase() !== me) throw new Error("Cannot modify another user's log entry");
+        // Normalise done before whitelist apply.
+        const sanitized = Object.assign({}, args);
+        if (sanitized.done !== undefined) {
+          sanitized.done = (sanitized.done === true || String(sanitized.done).toLowerCase() === 'true') ? 'TRUE' : 'FALSE';
+        }
+        applyWhitelistedUpdates(e, sanitized, LOG_UPDATE_FIELDS);
+        if (e.startTime && e.endTime && logTimeToMin(e.endTime) <= logTimeToMin(e.startTime)) {
+          throw new Error("endTime must be after startTime");
+        }
+        e.updatedAt = nowIso();
+        e.updatedBy = me;
+        await upsertRow(SHEET_TABS.dailylog, DAILYLOG_COLS, e);
+        return { summary: 'Updated log entry "' + e.title + '"' };
+      }
+      case "query_log": {
+        const me = (state.currentEmail || '').toLowerCase();
+        if (!me) return { summary: 'Not signed in', results: [] };
+        const f = args.filter || {};
+        const matched = state.dailyLog.filter(function(e) {
+          if ((e.createdBy || '').toLowerCase() !== me) return false;
+          if (f.dateExact && e.date !== f.dateExact) return false;
+          if (f.dateRange) {
+            if (f.dateRange.from && e.date < f.dateRange.from) return false;
+            if (f.dateRange.to && e.date > f.dateRange.to) return false;
+          }
+          if (f.done !== undefined && f.done !== null) {
+            const want = (f.done === true || String(f.done).toLowerCase() === 'true');
+            if (logDoneBool(e.done) !== want) return false;
+          }
+          if (f.search) {
+            const s = String(f.search).toLowerCase();
+            if (((e.title || '') + ' ' + (e.comment || '')).toLowerCase().indexOf(s) === -1) return false;
+          }
+          return true;
+        });
+        const done = matched.filter(function(e) { return logDoneBool(e.done); }).length;
+        const pct = matched.length === 0 ? 0 : Math.round((done / matched.length) * 100);
+        return {
+          summary: 'Found ' + matched.length + ' log entr' + (matched.length === 1 ? 'y' : 'ies') + ' · ' + done + '/' + matched.length + ' ticked (' + pct + '%)',
+          results: matched.slice(0, 50).map(function(e) {
+            return { id: e.id, date: e.date, startTime: e.startTime, endTime: e.endTime, title: e.title, done: logDoneBool(e.done), comment: e.comment };
+          })
+        };
       }
       case "log_visit": {
         const v = { id: newId('VIS'), companyId: args.companyId, date: args.date, type: args.type,

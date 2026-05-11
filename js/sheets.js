@@ -87,6 +87,25 @@ async function ensureVisitPrepSheet() {
   console.log('Created VisitPrep sheet with headers');
 }
 
+// Auto-create the DailyLog sheet tab if it doesn't exist. Mirrors the VisitPrep/Documents pattern.
+// Range MUST stay dynamic on DAILYLOG_COLS.length — see the April 19 VisitPrep bug for what
+// happens when column letters get hardcoded.
+async function ensureDailyLogSheet() {
+  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
+  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
+  const meta = await metaResp.json();
+  if (meta.sheets.some(function(s) { return s.properties.title === 'DailyLog'; })) return;
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'DailyLog' } } }] })
+  });
+  // Write headers — range is dynamic based on DAILYLOG_COLS length
+  const endCol = colLetter(DAILYLOG_COLS.length);
+  await sheetsWrite(`DailyLog!A1:${endCol}1`, [DAILYLOG_COLS]);
+  console.log('Created DailyLog sheet with headers');
+}
+
 // Auto-create the Documents sheet tab if it doesn't exist. Mirrors the VisitPrep pattern.
 // Used by the Learning tab.
 async function ensureDocumentsSheet() {
@@ -114,13 +133,15 @@ async function pullAll() {
 
     await ensureVisitPrepSheet();
     await ensureDocumentsSheet();
-    const [tRows, cRows, vRows, dRows, vpRows, docRows] = await Promise.all([
+    await ensureDailyLogSheet();
+    const [tRows, cRows, vRows, dRows, vpRows, docRows, dlRows] = await Promise.all([
       sheetsRead('Tasks!A2:Z'),
       sheetsRead('Companies!A2:Z'),
       sheetsRead('Visits!A2:Z'),
       sheetsRead('Deleted!A2:Z').catch(function() { return []; }),
       sheetsRead('VisitPrep!A2:Z').catch(function() { return []; }),
       sheetsRead('Documents!A2:Z').catch(function() { return []; }),
+      sheetsRead('DailyLog!A2:Z').catch(function() { return []; }),
     ]);
     state.tasks = tRows.filter(r=>r[0]).map(r=>rowToObj(r, TASK_COLS));
     state.companies = cRows.filter(r=>r[0]).map(r=>rowToObj(r, COMPANY_COLS));
@@ -128,6 +149,7 @@ async function pullAll() {
     state.deleted = dRows.filter(r=>r[0]).map(r=>rowToObj(r, DELETED_COLS));
     state.visitPreps = vpRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, VISITPREP_COLS);});
     state.documents = docRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, DOCUMENT_COLS);});
+    state.dailyLog = dlRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, DAILYLOG_COLS);});
     cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     autoArchiveOldDone();

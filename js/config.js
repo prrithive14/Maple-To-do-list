@@ -5,7 +5,7 @@ const APP_CONFIG = {
   calendarId: 'primary'
 };
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
-const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep', documents: 'Documents' };
+const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep', documents: 'Documents', dailylog: 'DailyLog' };
 // Tasks sheet now includes review fields (columns N, O, P). Existing tasks with empty values = "no review".
 const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory'];
 // Deleted sheet mirrors Tasks + archive fields + same review fields so archived tasks keep their review history
@@ -15,6 +15,9 @@ const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep',
 const VISITPREP_COLS = ['id','companyId','checks','notes','leadRating','visitDate','updatedAt'];
 // Documents sheet — Learning tab. Each row is either a file (driveFileId/driveLink populated) OR a URL (url populated). type='file'|'url'.
 const DOCUMENT_COLS = ['id','title','type','category','description','url','driveFileId','driveLink','mimeType','uploadedBy','uploadedAt','updatedAt'];
+// DailyLog sheet — per-user time blocks (Google-Calendar-style log). createdBy/updatedBy store raw lowercased OAuth email so per-user filtering survives role renames.
+// done is "TRUE"/"FALSE" string (sheets returns strings; toggleLogDone normalises).
+const DAILYLOG_COLS = ['id','date','startTime','endTime','title','done','comment','createdAt','createdBy','updatedAt','updatedBy'];
 // Seed categories shown in the Learning sidebar even when no documents exist yet. Free-text — users can add new ones via the upload modal.
 const LEARNING_SEED_CATEGORIES = ['Cold Call', 'Industry', 'Product', 'App Usage'];
 // Common categories shown at the top of the task category dropdown for fast picking.

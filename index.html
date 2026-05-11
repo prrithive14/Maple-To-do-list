@@ -71,6 +71,7 @@
 <nav class="tabs">
   <!-- NEW: #reviewAlertDot sits next to the existing #taskAlertDot. Blue (#3b82f6) vs. red for overdue. -->
   <button class="tab active" data-tab="tasks" onclick="switchTab('tasks')">📋 Tasks <span class="count" id="countTasks">0</span><span class="alert-dot" id="taskAlertDot"></span><span class="alert-dot" id="reviewAlertDot" style="background:#3b82f6" title=""></span></button>
+  <button class="tab" data-tab="dailylog" onclick="switchTab('dailylog')">🕒 Daily Log <span class="count" id="countDailyLog">0</span></button>
   <button class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Companies <span class="count" id="countCompanies">0</span></button>
   <button class="tab" data-tab="visitprep" onclick="switchTab('visitprep')">📋 Visit Prep</button>
   <button class="tab" data-tab="learning" onclick="switchTab('learning')">📚 Learning <span class="count" id="countLearning">0</span></button>
@@ -124,6 +125,33 @@
       </div>
       <div class="cal-grid" id="calGrid"></div>
     </div>
+  </section>
+
+  <section id="tab-dailylog" class="tab-pane" style="display:none">
+    <div class="dl-toolbar">
+      <div class="dl-toolbar-left">
+        <span class="dl-badge" id="dlBadge">0/0 ticked · 0%</span>
+      </div>
+      <div class="dl-toolbar-center">
+        <button class="btn btn-sm" onclick="dlNav(-1)">←</button>
+        <button class="btn btn-sm" onclick="dlNav(0)">Today</button>
+        <span class="dl-nav-label" id="dlNavLabel">—</span>
+        <button class="btn btn-sm" onclick="dlNav(1)">→</button>
+      </div>
+      <div class="dl-toolbar-right">
+        <div class="view-toggle" id="dlViewToggle">
+          <button data-dlview="day" onclick="setDailyLogView('day')">Day</button>
+          <button data-dlview="week" class="active" onclick="setDailyLogView('week')">Week</button>
+          <button data-dlview="month" onclick="setDailyLogView('month')">Month</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openLogModal()">+ Log entry</button>
+      </div>
+    </div>
+    <div class="dl-quickadd-row">
+      <input id="dlQuickAdd" class="dl-quickadd" placeholder='Quick-add: "Gym 6-8pm", "Call Dad 14:30-15:00"…' onkeydown="dlQuickAddSubmit(event)">
+      <button class="btn btn-sm" onclick="dlQuickAddSubmit({key:'Enter'})">Add</button>
+    </div>
+    <div id="dailyLogView" class="dl-scroll"></div>
   </section>
 
   <section id="tab-companies" class="tab-pane" style="display:none">
@@ -288,6 +316,33 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="logModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title" id="logModalTitle">New log entry</div><button class="modal-close" onclick="closeLogModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field form-row full"><label>Title</label><input id="lTitle" placeholder="What did/will you do?"></div>
+        <div class="field"><label>Date</label><input id="lDate" type="date"></div>
+        <div class="field"><label>Done</label>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:8px">
+            <input type="checkbox" id="lDone"><label for="lDone" style="margin:0;font-weight:400">Mark as ticked</label>
+          </div>
+        </div>
+        <div class="field"><label>Start time</label><input id="lStart" type="time" step="900"></div>
+        <div class="field"><label>End time</label><input id="lEnd" type="time" step="900"></div>
+        <div class="field form-row full"><label>Comment</label><textarea id="lComment" rows="3" placeholder="How did it go? Anything to note?"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="lDelete" onclick="deleteLogEntry()" style="display:none">Delete</button>
+      <div style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" onclick="closeLogModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveLogEntry()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="settingsModal">
   <div class="modal" style="max-width:520px">
     <div class="modal-header"><div class="modal-title">Settings</div><button class="modal-close" onclick="closeSettings()">✕</button></div>
@@ -414,6 +469,8 @@
 <script src="js/visits.js"></script>
 <script src="js/visitprep.js"></script>
 <script src="js/learning.js"></script>
+<script src="js/dailyLog.js"></script>
+<script src="js/dailyLogCalendar.js"></script>
 <script src="js/app.js"></script>
 <script src="js/chat.js"></script>
 </body>
