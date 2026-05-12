@@ -28,11 +28,23 @@ function hideSignInButton() {
 }
 
 function initAuth() {
-  if (typeof google === 'undefined' || !google.accounts) { setTimeout(initAuth, 200); return; }
+  if (typeof google === 'undefined' || !google.accounts) {
+    console.log('[auth] GIS not ready yet, retrying in 200ms');
+    setTimeout(initAuth, 200);
+    return;
+  }
+  console.log('[auth] initAuth: creating tokenClient');
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.clientId, scope: SCOPES,
     callback: (resp) => {
       if(resp.error) {
+        // Log the FULL response so the failure code/subtype is captured verbatim —
+        // we need this to distinguish immediate_failed (silent path expected to
+        // sometimes fail) from real bugs. Phase 3 fix selection depends on this.
+        console.warn('[auth] callback error=' + resp.error +
+          ' subtype=' + (resp.error_subtype || '-') +
+          ' description=' + (resp.error_description || '-') +
+          ' details=' + JSON.stringify(resp));
         // Expected silent-failure codes: user has no active Google session, third-party
         // cookies blocked, or the user dismissed an explicit popup. Surface the button
         // without a toast — the popup attempt itself is enough signal to the user.
@@ -46,6 +58,7 @@ function initAuth() {
       accessToken = resp.access_token;
       const expiresInSec = resp.expires_in || 3600;
       tokenExpiry = Date.now() + expiresInSec * 1000;
+      console.log('[auth] callback success expires_in=' + expiresInSec + 's scope=' + (resp.scope || '-'));
       hideSignInButton();
       setSync('connected', 'Connected');
       // Fetch the user's email to determine role (Prrithive / Sridharan / Unknown).
@@ -74,7 +87,12 @@ function initAuth() {
   silentRefresh();
   // Belt-and-braces #1: if silent refresh hasn't produced a token within a few seconds,
   // surface the Sign in button so a stalled GIS load doesn't leave the user stuck.
-  setTimeout(function() { if (!accessToken) showSignInButton(); }, SIGNIN_FALLBACK_MS);
+  setTimeout(function() {
+    if (!accessToken) {
+      console.warn('[auth] ' + SIGNIN_FALLBACK_MS + 'ms fallback fired: no token yet, revealing Sign in button');
+      showSignInButton();
+    }
+  }, SIGNIN_FALLBACK_MS);
 }
 
 // Belt-and-braces #2: setTimeout can be throttled when the tab is backgrounded, so the
@@ -83,7 +101,9 @@ function initAuth() {
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState !== 'visible') return;
   if (!tokenClient || !accessToken) return;
-  if (tokenExpiry - Date.now() < TOKEN_REFRESH_LEAD_MS) {
+  const remainingMs = tokenExpiry - Date.now();
+  if (remainingMs < TOKEN_REFRESH_LEAD_MS) {
+    console.log('[auth] visibilitychange: token expiring in ' + Math.round(remainingMs/1000) + 's, kicking silent refresh');
     silentRefresh();
   }
 });
@@ -180,15 +200,23 @@ function accessDeniedReload() {
 // exactly what we want — silent on the happy path, no surprise popups, button shown
 // quietly on failure.
 function silentRefresh() {
-  if(!tokenClient) return;
+  if(!tokenClient) {
+    console.warn('[auth] silentRefresh called before tokenClient ready — skipping');
+    return;
+  }
+  console.log('[auth] silentRefresh: requesting token with prompt=none at ' + new Date().toISOString());
   try { tokenClient.requestAccessToken({ prompt: 'none' }); }
-  catch(e) { console.warn('Silent refresh threw', e); showSignInButton(); }
+  catch(e) {
+    console.warn('[auth] silentRefresh threw synchronously', e);
+    showSignInButton();
+  }
 }
 // Explicit Sign in from the button. We default to '' (GIS picks the best UX:
 // re-consent if scopes changed, otherwise account picker for first-time use).
 function googleSignIn() {
   if(!tokenClient) { toast('Auth not ready, try again', true); return; }
   const prompt = accessToken ? '' : 'consent';
+  console.log('[auth] googleSignIn: interactive request with prompt=' + (prompt || '(empty)'));
   tokenClient.requestAccessToken({ prompt });
 }
 function setSync(s, text) {

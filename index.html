@@ -83,6 +83,16 @@
 </nav>
 
 <main class="main">
+  <!-- Shown by showPermissionBanner() in sheets.js when a Sheets API metadata call
+       returns 401/403 — token is stale, scope-insufficient, or the user doesn't
+       have access to the spreadsheet. Inline-styled to avoid touching css/styles.css. -->
+  <div id="permissionBanner" style="display:none;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;margin:12px 0;border-radius:8px;background:#fff3cd;color:#664d03;border:1px solid #ffecb5">
+    <div>
+      <strong>Sheet access denied.</strong>
+      Please re-sign-in, or ask <strong>Prrithive</strong> to share access to the spreadsheet.
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="googleSignIn()">Re-sign-in</button>
+  </div>
   <section id="tab-tasks" class="tab-pane">
     <div class="overdue-banner" id="overdueBanner">
       <div class="overdue-banner-text"><span>⚠</span><span id="overdueBannerText">0 tasks overdue</span></div>

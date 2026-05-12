@@ -1,5 +1,35 @@
 /* sheets.js — Google Sheets API helpers */
 
+// Thrown when a Sheets API call returns 401/403 — usually means the access token
+// is missing the right scopes, has been revoked, or the signed-in user doesn't
+// have permission on the underlying spreadsheet. Caught in pullAll to render a
+// friendly banner instead of letting downstream code crash on undefined fields
+// (e.g. `meta.sheets.some(...)` when the body is an error envelope, not metadata).
+class PermissionError extends Error {
+  constructor(status, body) {
+    super('Sheet access denied (HTTP ' + status + ')');
+    this.name = 'PermissionError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// Shared spreadsheet-metadata fetcher. Every ensure*Sheet() function needs the
+// list of tab titles; previously each inlined the fetch and then called
+// `meta.sheets.some(...)` with zero guard against 403, which crashed the app at
+// startup for users without sheet access. This helper centralises the check.
+async function fetchSheetsMeta(fields) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=` + encodeURIComponent(fields);
+  const resp = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
+  if (!resp.ok) {
+    let body = null;
+    try { body = await resp.json(); } catch(e) { /* body may not be JSON */ }
+    if (resp.status === 401 || resp.status === 403) throw new PermissionError(resp.status, body);
+    throw new Error('Sheets meta fetch failed: ' + resp.status);
+  }
+  return await resp.json();
+}
+
 async function sheetsRead(range) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}`;
   const r = await fetch(url, { headers: { Authorization: 'Bearer '+accessToken } });
@@ -37,9 +67,7 @@ async function upsertRow(tab, cols, obj) {
 async function deleteRowById(tab, id) {
   const idx = await findRowIndex(tab, id);
   if(idx < 0) return;
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(sheetId,title))`;
-  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
-  const meta = await metaResp.json();
+  const meta = await fetchSheetsMeta('sheets(properties(sheetId,title))');
   const sheet = meta.sheets.find(s => s.properties.title === tab);
   if(!sheet) return;
   const sheetId = sheet.properties.sheetId;
@@ -52,9 +80,7 @@ async function deleteRowById(tab, id) {
 
 // Auto-create the Deleted sheet tab if it doesn't exist
 async function ensureDeletedSheet() {
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
-  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
-  const meta = await metaResp.json();
+  const meta = await fetchSheetsMeta('sheets(properties(title))');
   const exists = meta.sheets.some(s => s.properties.title === 'Deleted');
   if(exists) return;
 
@@ -72,9 +98,7 @@ async function ensureDeletedSheet() {
 }
 
 async function ensureVisitPrepSheet() {
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
-  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
-  const meta = await metaResp.json();
+  const meta = await fetchSheetsMeta('sheets(properties(title))');
   if (meta.sheets.some(function(s) { return s.properties.title === 'VisitPrep'; })) return;
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
     method: 'POST',
@@ -91,9 +115,7 @@ async function ensureVisitPrepSheet() {
 // Range MUST stay dynamic on DAILYLOG_COLS.length — see the April 19 VisitPrep bug for what
 // happens when column letters get hardcoded.
 async function ensureDailyLogSheet() {
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
-  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
-  const meta = await metaResp.json();
+  const meta = await fetchSheetsMeta('sheets(properties(title))');
   if (meta.sheets.some(function(s) { return s.properties.title === 'DailyLog'; })) return;
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
     method: 'POST',
@@ -109,9 +131,7 @@ async function ensureDailyLogSheet() {
 // Auto-create the Documents sheet tab if it doesn't exist. Mirrors the VisitPrep pattern.
 // Used by the Learning tab.
 async function ensureDocumentsSheet() {
-  const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}?fields=sheets(properties(title))`;
-  const metaResp = await fetch(metaUrl, { headers: { Authorization: 'Bearer '+accessToken } });
-  const meta = await metaResp.json();
+  const meta = await fetchSheetsMeta('sheets(properties(title))');
   if (meta.sheets.some(function(s) { return s.properties.title === 'Documents'; })) return;
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
     method: 'POST',
@@ -154,6 +174,19 @@ async function pullAll() {
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
     autoArchiveOldDone();
   } catch(e) {
-    console.error(e); setSync('error','Sync failed'); toast('Sync failed: '+e.message, true);
+    console.error(e);
+    if (e instanceof PermissionError) {
+      setSync('error', 'Sheet access denied');
+      showPermissionBanner();
+      return;
+    }
+    setSync('error','Sync failed'); toast('Sync failed: '+e.message, true);
   }
+}
+
+// Reveal the friendly permission banner declared in index.html. Kept tiny on
+// purpose — banner content/markup lives in HTML so styling stays in css/styles.css.
+function showPermissionBanner() {
+  const b = document.getElementById('permissionBanner');
+  if (b) b.style.display = 'flex';
 }
