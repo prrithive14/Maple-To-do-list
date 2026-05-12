@@ -1,13 +1,23 @@
 /* auth.js — Google OAuth sign-in and token management.
-   Silent refresh strategy:
-   1. On load, attempt `prompt: 'none'` (strict silent). If Google session is active and
-      consent was previously granted, we get a new token with no UI.
-   2. On every successful token, set a setTimeout to refresh ~5 min before expiry.
-   3. `setTimeout` can be throttled in backgrounded tabs, so also re-check on
-      `visibilitychange` — if the token is about to expire when the tab becomes visible,
-      kick a silent refresh immediately.
-   4. The Sign in button is hidden in HTML and only revealed after a confirmed silent-
-      refresh failure — so the user never sees it flash before silent refresh resolves. */
+   Hybrid auth strategy (GitHub Pages + modern browsers block 3p cookies, so the
+   pure Token Client silent path falls back to a popup that load-time code can't
+   open). Two GIS clients work together:
+     1. On load, `google.accounts.id` (Sign-In) does a browser-native silent session
+        check. FedCM is its default behavior — there is no flag to toggle. If a
+        Google session exists, handleIdCredential fires; we then call the Token
+        Client with prompt: '' to mint the access token (no UI: consent was
+        previously granted for this client + scope).
+     2. If FedCM reports no session (skipped / notDisplayed / dismissed),
+        handleIdNotification reveals the Sign in button. googleSignIn() then
+        opens the consent flow on a real user gesture.
+     3. After the first token, a setTimeout 5 min before expiry calls
+        silentRefresh() (Token Client, prompt: 'none'). This runs *after* a
+        session is established, where the iframe path is more reliable.
+     4. setTimeout can be throttled in backgrounded tabs, so visibilitychange
+        re-checks expiry and refreshes proactively if inside the lead window.
+     5. The Sign in button is hidden in HTML and only revealed on a confirmed
+        no-session signal — so it never flashes before FedCM resolves.
+     6. 5s belt-and-braces: if no token by then, reveal the button anyway. */
 
 // Epoch millis when the current access token expires. 0 means "no valid token".
 // Kept in memory only — never persisted to localStorage (would leak credentials).
@@ -33,6 +43,10 @@ function initAuth() {
     setTimeout(initAuth, 200);
     return;
   }
+  // Browser-capability check for diagnostics — does NOT tell us whether GIS itself
+  // chose FedCM internally (that's not exposed), only whether the browser supports
+  // the underlying IdentityCredential API. Useful for triaging father's machine.
+  console.log('[auth] FedCM supported by browser: ' + ('IdentityCredential' in window));
   console.log('[auth] initAuth: creating tokenClient');
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.clientId, scope: SCOPES,
@@ -84,15 +98,89 @@ function initAuth() {
       tokenRefreshTimer = setTimeout(silentRefresh, ms);
     }
   });
-  silentRefresh();
-  // Belt-and-braces #1: if silent refresh hasn't produced a token within a few seconds,
-  // surface the Sign in button so a stalled GIS load doesn't leave the user stuck.
+  // Hybrid path: ask the Sign-In (ID) client to do a FedCM-based silent session
+  // check. On confirmed session → handleIdCredential mints the token via the
+  // Token Client. On no-session moments → handleIdNotification reveals the Sign
+  // in button. This replaces the on-load tokenClient.requestAccessToken({prompt:
+  // 'none'}) call that was getting popup-blocked under strict 3p-cookie rules.
+  if (google.accounts.id && typeof google.accounts.id.initialize === 'function') {
+    console.log('[auth] initAuth: configuring id client (FedCM session check)');
+    google.accounts.id.initialize({
+      client_id: cfg.clientId,
+      callback: handleIdCredential,
+      auto_select: true,
+      itp_support: true,
+    });
+    google.accounts.id.prompt(handleIdNotification);
+  } else {
+    // No id client available (very old GIS bundle or odd CDN failure). Best we
+    // can do is the legacy direct silent refresh, knowing it may popup-block.
+    console.warn('[auth] id client unavailable, falling back to direct silentRefresh');
+    silentRefresh();
+  }
+  // Belt-and-braces: if neither the id callback nor the token callback has fired
+  // within a few seconds, reveal the Sign in button so a stalled GIS load /
+  // unsupported FedCM doesn't leave the user stuck.
   setTimeout(function() {
     if (!accessToken) {
       console.warn('[auth] ' + SIGNIN_FALLBACK_MS + 'ms fallback fired: no token yet, revealing Sign in button');
       showSignInButton();
     }
   }, SIGNIN_FALLBACK_MS);
+}
+
+// Fires when google.accounts.id confirms a Google session via FedCM (auto-select
+// returning user) or via an interactive One Tap selection. We do NOT decode or
+// store the JWT in `resp.credential` — its presence alone is the "session is
+// live" signal we need before asking the Token Client for an access token.
+// Calling requestAccessToken with prompt: '' here is the documented no-UI path:
+// since consent was previously granted for this client + scope, GIS mints the
+// token without showing anything. (If GIS DOES try a popup here — same failure
+// mode as today — Phase 3.1 will switch the Token Client to ux_mode: 'redirect'.
+// The follow-up is pre-approved per the working agreement.)
+function handleIdCredential(resp) {
+  console.log('[auth] id.callback: session confirmed, requesting access token (credential length=' + (resp && resp.credential ? resp.credential.length : 0) + ')');
+  if (!tokenClient) {
+    console.warn('[auth] id.callback fired before tokenClient ready — ignoring');
+    return;
+  }
+  try { tokenClient.requestAccessToken({ prompt: '' }); }
+  catch(e) {
+    console.warn('[auth] requestAccessToken threw synchronously after id.callback', e);
+    showSignInButton();
+  }
+}
+
+// Called for every PromptMomentNotification from google.accounts.id.prompt().
+// We extract every documented method's value defensively (any of them can be
+// missing or throw on edge cases) and log the whole dump alongside a derived
+// `reason` string — per the spec, the named reason methods can return null and
+// we want full diagnostic detail if the hybrid path still fails.
+function handleIdNotification(n) {
+  function safeCall(fnName) {
+    try { return typeof n[fnName] === 'function' ? n[fnName]() : undefined; }
+    catch(e) { return '(threw:' + e.message + ')'; }
+  }
+  const dump = {
+    momentType: safeCall('getMomentType'),
+    isDisplayMoment: safeCall('isDisplayMoment'),
+    isDisplayed: safeCall('isDisplayed'),
+    isNotDisplayed: safeCall('isNotDisplayed'),
+    notDisplayedReason: safeCall('getNotDisplayedReason'),
+    isSkippedMoment: safeCall('isSkippedMoment'),
+    skippedReason: safeCall('getSkippedReason'),
+    isDismissedMoment: safeCall('isDismissedMoment'),
+    dismissedReason: safeCall('getDismissedReason'),
+  };
+  let reason = '(unknown)';
+  if (dump.isDisplayMoment) reason = 'displayed';
+  else if (dump.isNotDisplayed) reason = 'notDisplayed:' + dump.notDisplayedReason;
+  else if (dump.isSkippedMoment) reason = 'skipped:' + dump.skippedReason;
+  else if (dump.isDismissedMoment) reason = 'dismissed:' + dump.dismissedReason;
+  console.log('[auth] id.prompt notification reason=' + reason + ' raw=' + JSON.stringify(dump));
+  // Only reveal the Sign in button on terminal "no session" moments. A display
+  // moment means the prompt UI is up; we wait for the credential callback.
+  if (reason !== 'displayed') showSignInButton();
 }
 
 // Belt-and-braces #2: setTimeout can be throttled when the tab is backgrounded, so the
@@ -204,7 +292,11 @@ function silentRefresh() {
     console.warn('[auth] silentRefresh called before tokenClient ready — skipping');
     return;
   }
-  console.log('[auth] silentRefresh: requesting token with prompt=none at ' + new Date().toISOString());
+  // FedCM=<bool> here reflects browser capability only. GIS doesn't expose
+  // whether it actually used the FedCM path internally vs. an iframe / popup —
+  // this log is for triage (e.g. if father's machine reports FedCM=false we
+  // know to check Chrome version / flags).
+  console.log('[auth] silentRefresh: using FedCM=' + ('IdentityCredential' in window) + ' (browser capability) at ' + new Date().toISOString());
   try { tokenClient.requestAccessToken({ prompt: 'none' }); }
   catch(e) {
     console.warn('[auth] silentRefresh threw synchronously', e);
