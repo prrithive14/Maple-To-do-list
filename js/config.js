@@ -32,5 +32,6 @@ const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 // Any email not in this map is treated as "Unknown" and gets read-only access to reviews.
 const USER_EMAILS = {
   'prrithive@gmail.com': 'Prrithive',
-  'sridharanbalaiyan@gmail.com': 'Sridharan'
+  'sridharanbalaiyan@gmail.com': 'Sridharan',
+  'prrithive1@gmail.com': 'Prrithive',
 };
