@@ -1,19 +1,52 @@
-/* auth.js — Google OAuth sign-in and token management */
+/* auth.js — Google OAuth sign-in and token management.
+   Silent refresh strategy:
+   1. On load, attempt `prompt: 'none'` (strict silent). If Google session is active and
+      consent was previously granted, we get a new token with no UI.
+   2. On every successful token, set a setTimeout to refresh ~5 min before expiry.
+   3. `setTimeout` can be throttled in backgrounded tabs, so also re-check on
+      `visibilitychange` — if the token is about to expire when the tab becomes visible,
+      kick a silent refresh immediately.
+   4. The Sign in button is hidden in HTML and only revealed after a confirmed silent-
+      refresh failure — so the user never sees it flash before silent refresh resolves. */
+
+// Epoch millis when the current access token expires. 0 means "no valid token".
+// Kept in memory only — never persisted to localStorage (would leak credentials).
+let tokenExpiry = 0;
+// Buffer before expiry inside which we proactively refresh.
+const TOKEN_REFRESH_LEAD_MS = 5 * 60 * 1000;
+// Fallback delay: if silent refresh hasn't produced a token by this point, show the
+// Sign in button so the user can recover from a stalled GIS load.
+const SIGNIN_FALLBACK_MS = 5000;
+
+function showSignInButton() {
+  const btn = document.getElementById('signInBtn');
+  if (btn) btn.style.display = 'inline-flex';
+}
+function hideSignInButton() {
+  const btn = document.getElementById('signInBtn');
+  if (btn) btn.style.display = 'none';
+}
+
 function initAuth() {
   if (typeof google === 'undefined' || !google.accounts) { setTimeout(initAuth, 200); return; }
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: cfg.clientId, scope: SCOPES,
     callback: (resp) => {
       if(resp.error) {
-        if(resp.error === 'popup_closed_by_user' || resp.error === 'access_denied') {
-          setSync('', 'Not signed in'); document.getElementById('signInBtn').style.display = 'inline-flex'; return;
+        // Expected silent-failure codes: user has no active Google session, third-party
+        // cookies blocked, or the user dismissed an explicit popup. Surface the button
+        // without a toast — the popup attempt itself is enough signal to the user.
+        const silentFailureCodes = ['immediate_failed', 'popup_failed_to_open', 'popup_closed_by_user', 'access_denied'];
+        setSync('', 'Not signed in'); showSignInButton();
+        if (silentFailureCodes.indexOf(resp.error) === -1) {
+          toast('Sign-in failed: '+resp.error, true);
         }
-        setSync('', 'Not signed in'); document.getElementById('signInBtn').style.display = 'inline-flex';
-        if(resp.error !== 'immediate_failed') { toast('Sign-in failed: '+resp.error, true); }
         return;
       }
       accessToken = resp.access_token;
-      document.getElementById('signInBtn').style.display = 'none';
+      const expiresInSec = resp.expires_in || 3600;
+      tokenExpiry = Date.now() + expiresInSec * 1000;
+      hideSignInButton();
       setSync('connected', 'Connected');
       // Fetch the user's email to determine role (Prrithive / Sridharan / Unknown).
       // SECURITY: fetchUserEmail now returns false for unauthorized users (and handles
@@ -33,13 +66,27 @@ function initAuth() {
         console.error('fetchUserEmail unexpectedly threw:', e);
         denyAccess('(verification error)');
       });
-      const expiresIn = (resp.expires_in || 3600) * 1000;
       if(tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
-      tokenRefreshTimer = setTimeout(silentRefresh, Math.max(60000, expiresIn - 5*60*1000));
+      const ms = Math.max(60000, expiresInSec * 1000 - TOKEN_REFRESH_LEAD_MS);
+      tokenRefreshTimer = setTimeout(silentRefresh, ms);
     }
   });
   silentRefresh();
+  // Belt-and-braces #1: if silent refresh hasn't produced a token within a few seconds,
+  // surface the Sign in button so a stalled GIS load doesn't leave the user stuck.
+  setTimeout(function() { if (!accessToken) showSignInButton(); }, SIGNIN_FALLBACK_MS);
 }
+
+// Belt-and-braces #2: setTimeout can be throttled when the tab is backgrounded, so the
+// 55-min refresh timer can fire after the token has already expired. Re-check on every
+// visibility-restore event and refresh proactively if we're inside the lead window.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState !== 'visible') return;
+  if (!tokenClient || !accessToken) return;
+  if (tokenExpiry - Date.now() < TOKEN_REFRESH_LEAD_MS) {
+    silentRefresh();
+  }
+});
 
 // Fetch the signed-in user's email from Google userinfo endpoint.
 // Requires the userinfo.email scope (added in config.js SCOPES).
@@ -86,6 +133,7 @@ async function denyAccess(email) {
   const tokenToRevoke = accessToken;
   // Clear local state immediately so any in-flight code can't use the token.
   accessToken = null;
+  tokenExpiry = 0;
   state.currentEmail = '';
   state.currentUser = 'Unknown';
   if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; }
@@ -127,11 +175,17 @@ function accessDeniedReload() {
   location.reload();
 }
 
+// Strict silent refresh. `prompt: 'none'` instructs GIS to fail (with `immediate_failed`)
+// rather than show any UI when consent or session selection would be needed. That's
+// exactly what we want — silent on the happy path, no surprise popups, button shown
+// quietly on failure.
 function silentRefresh() {
   if(!tokenClient) return;
-  try { tokenClient.requestAccessToken({ prompt: '' }); }
-  catch(e) { console.warn('Silent refresh failed', e); document.getElementById('signInBtn').style.display = 'inline-flex'; }
+  try { tokenClient.requestAccessToken({ prompt: 'none' }); }
+  catch(e) { console.warn('Silent refresh threw', e); showSignInButton(); }
 }
+// Explicit Sign in from the button. We default to '' (GIS picks the best UX:
+// re-consent if scopes changed, otherwise account picker for first-time use).
 function googleSignIn() {
   if(!tokenClient) { toast('Auth not ready, try again', true); return; }
   const prompt = accessToken ? '' : 'consent';

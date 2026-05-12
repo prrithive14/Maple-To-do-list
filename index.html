@@ -59,7 +59,11 @@
     <div class="brand"><h1>Maple MPSS</h1><span class="subtitle">CRM &amp; Tasks</span></div>
     <div class="header-actions">
       <div id="syncStatus" class="sync-status"><span class="dot"></span><span id="syncText">Not signed in</span></div>
-      <button id="signInBtn" class="btn" onclick="googleSignIn()">Sign in with Google</button>
+      <!-- Hidden by default. auth.js calls showSignInButton() only after silent refresh
+           fails (no active Google session, cookies blocked, etc.) or after the 5s
+           fallback if GIS hasn't responded. Prevents a flash of the button before
+           silent refresh resolves. -->
+      <button id="signInBtn" class="btn" onclick="googleSignIn()" style="display:none">Sign in with Google</button>
       <button id="themeToggle" class="btn btn-ghost" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
       <!-- Settings is hidden by default and only revealed for authorized users (see auth.js).
            This keeps OAuth Client ID, Sheet ID, and "Reset all settings" out of reach of strangers. -->

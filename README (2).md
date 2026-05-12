@@ -161,6 +161,13 @@ Everything in this list is live in production.
 - `get_stats` uses midnight-today as cutoff
 - Cascade delete for companies works in both UI and chat tool
 
+### Auth & token refresh
+- **Strict silent refresh on every load.** `auth.js#silentRefresh` calls `tokenClient.requestAccessToken({ prompt: 'none' })`. If the user's Google session is active and consent was previously granted, a new token is issued with zero UI. If not, GIS reports `immediate_failed` and the Sign in button is revealed.
+- **Sign in button hidden by default.** Shown only after a confirmed silent-refresh failure or a 5-second fallback timer (covers a stalled GIS load). No more flash-of-sign-in-button on every page load.
+- **Refresh ahead of expiry.** On every successful token, a `setTimeout` fires ~5 minutes before expiry (`expires_in − 5min`, min 60s) to silent-refresh.
+- **Visibility-restore guard.** `setTimeout` is throttled in backgrounded tabs, so the timer alone can miss the refresh window. A `visibilitychange` listener checks the token expiry whenever the tab becomes visible and triggers a silent refresh if we're inside the 5-minute lead window.
+- **Nothing is persisted.** `accessToken` and `tokenExpiry` live in module memory only — never `localStorage`, never `sessionStorage`. A page close = no token on disk. Re-acquisition on next load comes from Google's own session cookies.
+
 ### Identity & security
 - `USER_EMAILS` map in `config.js` is the single allowlist. Add a row → user has access. Remove a row → access revoked on next sign-in.
 - `fetchUserEmail()` in `auth.js` calls Google's userinfo endpoint with `userinfo.email` scope
