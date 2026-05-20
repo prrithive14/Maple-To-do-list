@@ -20,7 +20,7 @@
   let pendingTaskBatch = null;           // { tasks: [...], panelEl, chipEl }
   let batchRowCounter = 0;               // for unique DOM ids on batch rows
 
-  const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','companyId','notes','links'];
+  const TASK_UPDATE_FIELDS = ['name','status','priority','date','duration','assignee','category','taskType','companyId','notes','links'];
   const COMPANY_UPDATE_FIELDS = ['name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes'];
   // Daily Log: whitelisted updatable fields. done is a boolean (we normalise to "TRUE"/"FALSE").
   // createdBy/createdAt/updatedBy/updatedAt/id are NEVER in the whitelist — those are server-controlled.
@@ -110,6 +110,7 @@
         duration: args.duration || '',
         assignee: args.assignee || getCurrentUser() || 'Prrithive',
         category: args.category || (companyId ? 'Sales' : 'Personal'),
+        taskType: args.taskType || 'daily',
         companyId: companyId,
         unresolvedCompanyName: companyId ? '' : companyName,
         displayCompanyName: displayCompanyName,
@@ -164,6 +165,10 @@
             <option${t.category==='Personal'?' selected':''}>Personal</option>
             <option${t.category==='Learning'?' selected':''}>Learning</option>
             <option${t.category==='Other'?' selected':''}>Other</option>
+          </select>
+          <select data-field="taskType">
+            <option value="daily"${t.taskType!=='strategic'?' selected':''}>Daily</option>
+            <option value="strategic"${t.taskType==='strategic'?' selected':''}>Strategic</option>
           </select>
           <select data-field="companyId">${companyOptionsHTML}</select>
           ${t.unresolvedCompanyName ? '<span class="batchCompanyName" title="Not in CRM — pick a match from the dropdown or leave as none">' + esc(t.unresolvedCompanyName) + '</span>' : ''}
@@ -259,6 +264,7 @@
           duration: t.duration || '',
           assignee: t.assignee || 'Prrithive',
           category: t.category || 'Personal',
+          taskType: t.taskType || 'daily',
           companyId: t.companyId || '',
           notes: t.notes || '',
           links: t.links || '',
@@ -517,7 +523,7 @@
         today: new Date().toISOString().slice(0,10),
         user: getCurrentUser(),
         companies: state.companies.map(function(c) { return { id: c.id, name: c.name }; }),
-        tasks: state.tasks.map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee, reviewer: t.reviewer || '', reviewStatus: t.reviewStatus || '' }; }),
+        tasks: state.tasks.map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee, taskType: t.taskType || 'daily', reviewer: t.reviewer || '', reviewStatus: t.reviewStatus || '' }; }),
         visits: state.visits.slice(-50).map(function(v) { return { date: v.date, type: v.type, companyId: v.companyId, outcome: v.outcome, loggedBy: v.loggedBy }; }),
         categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.',
         reviewGuide: 'Review workflow: tasks can have reviewer="Prrithive"|"Sridharan" and reviewStatus=""|"pending"|"changes_requested"|"approved". Use request_review to ask someone to review, respond_to_review to approve or request changes. Only the named reviewer can approve or request changes. Only the task assignee can re-request review after changes.'
@@ -601,6 +607,7 @@
         const defaultCat = args.companyId ? 'Sales' : 'Personal';
         const t = { id: newId('TSK'), name: args.name, status: args.status || 'Not started', priority: args.priority || 'Medium',
           date: args.date || '', duration: args.duration || '', assignee: args.assignee || 'Prrithive', category: args.category || defaultCat,
+          taskType: args.taskType || 'daily',
           companyId: args.companyId || '', notes: args.notes || '', links: args.links || '', createdAt: nowIso(), updatedAt: nowIso(),
           reviewer: '', reviewStatus: '', reviewHistory: '' };
         state.tasks.push(t); await upsertRow(SHEET_TABS.tasks, TASK_COLS, t);

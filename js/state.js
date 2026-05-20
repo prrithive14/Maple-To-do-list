@@ -11,12 +11,24 @@ let state = {
   // 'Prrithive' / 'Sridharan' / 'Both' / 'unassigned' = specific filters.
   // Default 'me' is set on sign-in once we know who the user is — see auth.js.
   taskAssigneeFilter: 'me',
+  // taskType tab switcher: 'daily' (default) | 'strategic' | 'all'. Filters kanban + calendar.
+  // Persisted in localStorage['maple_taskType'] — restored just below this object literal.
+  taskTypeFilter: 'daily',
   editingTask: null, editingCompany: null, editingVisit: null,
   visitForCompany: null, taskForCompany: null,
   // Identity — populated by auth.js after successful sign-in via fetchUserEmail()
   currentEmail: '',      // raw OAuth email, e.g. "prrithive14@gmail.com"
   currentUser: 'Unknown' // role name from USER_EMAILS map, or "Unknown"
 };
+
+// Restore the persisted taskType tab before any render runs. Validated against the
+// known values so a stale/garbage localStorage entry can't break filtering.
+(function restoreTaskTypeFilter() {
+  try {
+    var saved = localStorage.getItem('maple_taskType');
+    if (saved === 'daily' || saved === 'strategic' || saved === 'all') state.taskTypeFilter = saved;
+  } catch (e) {}
+})();
 
 let cfg = { ...APP_CONFIG };
 let accessToken = null;
@@ -29,7 +41,15 @@ function nowIso() { return new Date().toISOString(); }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function formatDate(d) { if(!d) return ''; const dt = new Date(d); if(isNaN(dt)) return d; return dt.toLocaleDateString('en-CA', { month:'short', day:'numeric' }); }
 function colLetter(n) { let s = ''; while(n > 0){ const m = (n-1)%26; s = String.fromCharCode(65+m) + s; n = Math.floor((n-1)/26); } return s; }
-function rowToObj(row, cols) { const o = {}; cols.forEach((c, i) => o[c] = (row[i] !== undefined ? row[i] : '') ); return o; }
+function rowToObj(row, cols) {
+  const o = {};
+  cols.forEach((c, i) => o[c] = (row[i] !== undefined ? row[i] : ''));
+  // taskType backfill: pre-migration rows have a blank cell — normalise to 'daily'
+  // so nothing downstream ever sees an empty taskType. Only fires when taskType is
+  // a column in `cols` (Tasks/Deleted); other entities have no such key.
+  if (o.taskType === '') o.taskType = 'daily';
+  return o;
+}
 function objToRow(o, cols) { return cols.map(c => o[c] !== undefined && o[c] !== null ? String(o[c]) : ''); }
 
 function tabKeyForName(tab) {
@@ -119,6 +139,13 @@ function cacheLocal() {
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem('maple_cache') || '{}');
-    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; state.documents = c.documents||[]; state.dailyLog = c.dailyLog||[]; }
+    if(c.tasks){ state.tasks = c.tasks; state.companies = c.companies||[]; state.visits = c.visits||[]; state.deleted = c.deleted||[]; state.visitPreps = c.visitPreps||[]; state.documents = c.documents||[]; state.dailyLog = c.dailyLog||[]; normalizeTaskTypes(); }
   } catch(e){}
+}
+
+// Cached tasks written before the taskType migration won't have the field.
+// rowToObj covers fresh sheet reads; this covers the localStorage cache path.
+function normalizeTaskTypes() {
+  (state.tasks || []).forEach(function(t){ if(!t.taskType) t.taskType = 'daily'; });
+  (state.deleted || []).forEach(function(t){ if(!t.taskType) t.taskType = 'daily'; });
 }

@@ -144,6 +144,73 @@ async function ensureDocumentsSheet() {
   console.log('Created Documents sheet with headers');
 }
 
+// ===== taskType SCHEMA MIGRATION =====
+// Runs once per session (guarded by taskTypeMigrationChecked) on the first
+// post-auth pullAll — i.e. on app boot. Idempotent: safe to run repeatedly.
+// Mirrors the ensure*Sheet pattern. Failure here must NEVER block app boot, so
+// every path is wrapped in try/catch and the rowToObj blank→'daily' normaliser
+// stays in place as a safety net for any reads that race the migration.
+let taskTypeMigrationChecked = false;
+
+async function ensureTaskTypeColumn() {
+  await migrateTaskTypeForTab('Tasks');
+  await migrateTaskTypeForTab('Deleted');
+}
+
+async function migrateTaskTypeForTab(tab) {
+  try {
+    // Header row. Sheets trims trailing empties, so headerRow.length = populated columns.
+    // Range strings are passed raw — no encodeURIComponent (see README invariants).
+    const headerResp = await sheetsRead(`${tab}!1:1`);
+    const headerRow = (headerResp && headerResp[0]) ? headerResp[0] : [];
+    const existingIdx = headerRow.indexOf('taskType');
+
+    // Data-row count = populated cells in column A from row 2 down (every row has an id).
+    const idCol = await sheetsRead(`${tab}!A2:A`);
+    const dataRowCount = idCol.length;
+
+    if (existingIdx === -1) {
+      // Case (a): header missing — append it, then backfill every data row with "daily".
+      const newCol = colLetter(headerRow.length + 1);
+      await sheetsWrite(`${tab}!${newCol}1`, [['taskType']]);
+      if (dataRowCount > 0) {
+        const fill = [];
+        for (let i = 0; i < dataRowCount; i++) fill.push(['daily']);
+        // One contiguous write covering all data rows — never per-row.
+        await sheetsWrite(`${tab}!${newCol}2:${newCol}${dataRowCount + 1}`, fill);
+      }
+      console.log(`Schema check: ${tab} taskType column added`);
+      return;
+    }
+
+    // Case (b): header present — backfill only the blank cells with "daily".
+    const col = colLetter(existingIdx + 1);
+    const colValues = await sheetsRead(`${tab}!${col}2:${col}`);
+    const blanks = [];
+    for (let i = 0; i < dataRowCount; i++) {
+      const cell = (colValues[i] && colValues[i][0] !== undefined) ? colValues[i][0] : '';
+      if (cell === '' || cell === null) blanks.push(i + 2); // 1-based sheet row number
+    }
+    if (blanks.length === 0) {
+      console.log(`Schema check: ${tab} taskType column OK`);
+      return;
+    }
+    // Blank cells may be non-contiguous — one values:batchUpdate covers them all in a single call.
+    const data = blanks.map(rowNum => ({ range: `${tab}!${col}${rowNum}`, values: [['daily']] }));
+    const resp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchUpdate`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valueInputOption: 'RAW', data })
+    });
+    if (!resp.ok) throw new Error('batchUpdate failed: ' + resp.status);
+    console.log(`Schema check: ${tab} taskType column already present, ${blanks.length} blanks filled`);
+  } catch (e) {
+    // Never block boot — log and continue. rowToObj normalises blank taskType to 'daily'
+    // on read, so the app stays correct even if this migration didn't complete.
+    console.error(`Schema check failed for ${tab} taskType column:`, e);
+  }
+}
+
 async function pullAll() {
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -154,6 +221,15 @@ async function pullAll() {
     await ensureVisitPrepSheet();
     await ensureDocumentsSheet();
     await ensureDailyLogSheet();
+
+    // taskType schema migration — once per session, on the first post-auth sync (= boot).
+    // Runs after the ensure*Sheet calls (Deleted must exist first). Self-contained
+    // try/catch inside ensureTaskTypeColumn means it can never abort the data load below.
+    if (!taskTypeMigrationChecked) {
+      taskTypeMigrationChecked = true;
+      try { await ensureTaskTypeColumn(); }
+      catch (e) { console.error('taskType migration error:', e); }
+    }
     const [tRows, cRows, vRows, dRows, vpRows, docRows, dlRows] = await Promise.all([
       sheetsRead('Tasks!A2:Z'),
       sheetsRead('Companies!A2:Z'),

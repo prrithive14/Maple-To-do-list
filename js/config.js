@@ -6,10 +6,15 @@ const APP_CONFIG = {
 };
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
 const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep', documents: 'Documents', dailylog: 'DailyLog' };
-// Tasks sheet now includes review fields (columns N, O, P). Existing tasks with empty values = "no review".
-const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory'];
-// Deleted sheet mirrors Tasks + archive fields + same review fields so archived tasks keep their review history
-const DELETED_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','archivedAt','archiveReason'];
+// Tasks sheet now includes review fields (columns N, O, P) + taskType (column Q).
+// taskType is APPENDED last so existing column positions never shift. Existing tasks
+// with empty values = "no review"; empty taskType is normalised to 'daily' on read.
+const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','taskType'];
+// Deleted sheet mirrors Tasks + archive fields + same review fields so archived tasks keep their review history.
+// taskType is the LAST column (S) so it survives archive/restore without shifting archivedAt/archiveReason.
+const DELETED_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','archivedAt','archiveReason','taskType'];
+// Task time-horizon split. 'daily' = short-horizon execution work; 'strategic' = longer-horizon planning/research.
+const TASK_TYPES = ['daily','strategic'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
 const VISIT_COLS = ['id','companyId','date','type','outcome','notes','nextStep','loggedBy','createdAt'];
 const VISITPREP_COLS = ['id','companyId','checks','notes','leadRating','visitDate','updatedAt'];

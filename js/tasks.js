@@ -16,7 +16,20 @@ function setTaskView(view) {
   renderTaskView();
 }
 
-function renderTaskView() { if(state.taskView === 'calendar') renderCalendar(); else renderKanban(); }
+function renderTaskView() {
+  // Export button is gated on having at least one task — no point exporting an empty workbook.
+  var exportBtn = document.getElementById('exportBtn');
+  if (exportBtn) exportBtn.style.display = (state.tasks && state.tasks.length > 0) ? '' : 'none';
+  if(state.taskView === 'calendar') renderCalendar(); else renderKanban();
+}
+
+// Daily / Strategic / All tab switcher. Persists the choice so it survives reload.
+function setTaskTypeFilter(type) {
+  state.taskTypeFilter = type;
+  try { localStorage.setItem('maple_taskType', type); } catch(e){}
+  document.querySelectorAll('#taskTypeToggle button').forEach(b => b.classList.toggle('active', b.dataset.tasktype === type));
+  renderTaskView();
+}
 
 // ===== REVIEW HELPERS =====
 // Returns a badge HTML string for a task's review state, or '' if no review.
@@ -83,6 +96,8 @@ function getFilteredTasks() {
     // Scope filter — 'all' option was removed; only 'company' or 'personal' apply.
     if(state.taskScope === 'company' && !t.companyId) return false;
     if(state.taskScope === 'personal' && t.companyId) return false;
+    // taskType tab filter — 'all' shows everything; otherwise exact match (blank treated as 'daily').
+    if(state.taskTypeFilter && state.taskTypeFilter !== 'all' && (t.taskType || 'daily') !== state.taskTypeFilter) return false;
     if(search && !(t.name||'').toLowerCase().includes(search)) return false;
     if(cat && t.category !== cat) return false;
     // Assignee filter — special values:
@@ -269,7 +284,7 @@ function openTaskModal(id, defaultStatus) {
   const t = state.editingTask || {
     id: newId('TSK'), name:'', status: defaultStatus||'Not started', priority:'Medium',
     date:'', duration:'', assignee:'Prrithive', category:'', companyId: state.taskForCompany||'',
-    notes:'', links:'', createdAt: nowIso(),
+    notes:'', links:'', createdAt: nowIso(), taskType:'daily',
     reviewer:'', reviewStatus:'', reviewHistory:''
   };
   if(!id) { t.category = (state.taskForCompany || t.companyId) ? 'Sales' : 'Personal'; }
@@ -283,6 +298,7 @@ function openTaskModal(id, defaultStatus) {
   document.getElementById('tAssignee').value = t.assignee||'Prrithive';
   document.getElementById('tCategory').value = t.category||'';
   document.getElementById('tCompany').value = t.companyId||'';
+  document.getElementById('tType').value = t.taskType || 'daily';
   document.getElementById('tNotes').value = t.notes||'';
   document.getElementById('tLinks').value = t.links||'';
   document.getElementById('tDelete').style.display = id ? 'inline-flex' : 'none';
@@ -306,7 +322,8 @@ async function saveTask() {
   t.date = document.getElementById('tDate').value; t.duration = document.getElementById('tDuration').value;
   t.assignee = document.getElementById('tAssignee').value; t.category = document.getElementById('tCategory').value;
   t.companyId = document.getElementById('tCompany').value; t.notes = document.getElementById('tNotes').value;
-  t.links = document.getElementById('tLinks').value; t.updatedAt = nowIso();
+  t.links = document.getElementById('tLinks').value; t.taskType = document.getElementById('tType').value || 'daily';
+  t.updatedAt = nowIso();
   // Review fields (reviewer, reviewStatus, reviewHistory) are NOT read from the form —
   // they're updated exclusively via the review action buttons (requestReview/approveReview/etc.)
   const idx = state.tasks.findIndex(x=>x.id===t.id);

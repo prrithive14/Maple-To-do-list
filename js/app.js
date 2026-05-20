@@ -67,7 +67,16 @@ function populateFilterOptions() {
   compSel.innerHTML = '<option value="">All companies</option>' + compOpts;
   tCompSel.innerHTML = '<option value="">— None —</option>' + compOpts;
 }
-function initApp() { showApp(); loadCache(); refreshAll(); initAuth(); applyTheme(); }
+// Sync the Daily/Strategic/All toggle's active button to the persisted value
+// (state.taskTypeFilter was restored from localStorage in state.js). The HTML
+// hardcodes 'daily' as active — this corrects it when the saved tab differs.
+function restoreTaskTypeToggle() {
+  var want = state.taskTypeFilter || 'daily';
+  document.querySelectorAll('#taskTypeToggle button').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tasktype === want);
+  });
+}
+function initApp() { showApp(); loadCache(); refreshAll(); restoreTaskTypeToggle(); initAuth(); applyTheme(); }
 function forceSync() { if(accessToken) pullAll(); else toast('Sign in first', true); }
 
 // ===== THEME (light/dark) =====

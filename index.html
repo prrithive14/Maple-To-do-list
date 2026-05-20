@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/styles.css?v=20260519">
 <script>
   // Apply theme BEFORE paint to avoid flash of light theme on load.
   // Default: dark (per Prrithive + Sridharan preference). Toggle persists in localStorage.
@@ -105,6 +105,13 @@
         <button data-view="kanban" class="active" onclick="setTaskView('kanban')">☰ Kanban</button>
         <button data-view="calendar" onclick="setTaskView('calendar')">📅 Calendar</button>
       </div>
+      <!-- Daily/Strategic/All tab switcher. Filters both kanban + calendar (they share this bar).
+           Default Daily; the active button is corrected from localStorage on init by app.js. -->
+      <div class="view-toggle" id="taskTypeToggle">
+        <button data-tasktype="daily" class="active" onclick="setTaskTypeFilter('daily')">Daily</button>
+        <button data-tasktype="strategic" onclick="setTaskTypeFilter('strategic')">Strategic</button>
+        <button data-tasktype="all" onclick="setTaskTypeFilter('all')">All</button>
+      </div>
       <input class="search-input" id="taskSearch" placeholder="Search tasks…" oninput="renderTaskView()">
       <select class="filter-select" id="filterCategory" onchange="renderTaskView()"><option value="">All categories</option></select>
       <select class="filter-select" id="filterAssignee" onchange="renderTaskView()">
@@ -125,6 +132,9 @@
         <option value="approved">Approved</option>
         <option value="no_review">No review</option>
       </select>
+      <!-- Export to .xlsx. margin-left:auto pushes Export + Add task to the top-right of
+           the filters bar. Hidden when there are no tasks — toggled by renderTaskView(). -->
+      <button class="btn btn-sm" id="exportBtn" onclick="exportTasksToExcel()" style="margin-left:auto;display:none">📤 Export</button>
       <button class="btn btn-primary btn-sm" onclick="openTaskModal()">+ Add task</button>
     </div>
     <div class="kanban" id="kanban"></div>
@@ -219,6 +229,7 @@
         <div class="field form-row full"><label>Task name</label><input id="tName"></div>
         <div class="field"><label>Status</label><select id="tStatus"><option>Not started</option><option>In progress</option><option>Done</option><option>Blocked</option></select></div>
         <div class="field"><label>Priority</label><select id="tPriority"><option>Low</option><option>Medium</option><option>High</option><option>Urgent</option></select></div>
+        <div class="field"><label>Type</label><select id="tType"><option value="daily">Daily</option><option value="strategic">Strategic</option></select></div>
         <div class="field"><label>Date</label><input id="tDate" type="date"></div>
         <div class="field"><label>Duration (hrs)</label><input id="tDuration" type="number" step="0.5" min="0"></div>
         <div class="field"><label>Assignee</label><select id="tAssignee"><option>Prrithive</option><option>Sridharan</option><option>Both</option></select></div>
@@ -470,20 +481,21 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <!-- Load order matters: config first, then state, then API, then features, then app init last -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="js/config.js"></script>
-<script src="js/state.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/sheets.js"></script>
-<script src="js/archive.js"></script>
-<script src="js/drive.js"></script>
-<script src="js/tasks.js"></script>
-<script src="js/companies.js"></script>
-<script src="js/visits.js"></script>
-<script src="js/visitprep.js"></script>
-<script src="js/learning.js"></script>
-<script src="js/dailyLog.js"></script>
-<script src="js/dailyLogCalendar.js"></script>
-<script src="js/app.js"></script>
-<script src="js/chat.js"></script>
+<script src="js/config.js?v=20260519"></script>
+<script src="js/state.js?v=20260519"></script>
+<script src="js/auth.js?v=20260519"></script>
+<script src="js/sheets.js?v=20260519"></script>
+<script src="js/archive.js?v=20260519"></script>
+<script src="js/drive.js?v=20260519"></script>
+<script src="js/tasks.js?v=20260519"></script>
+<script src="js/companies.js?v=20260519"></script>
+<script src="js/visits.js?v=20260519"></script>
+<script src="js/visitprep.js?v=20260519"></script>
+<script src="js/learning.js?v=20260519"></script>
+<script src="js/dailyLog.js?v=20260519"></script>
+<script src="js/dailyLogCalendar.js?v=20260519"></script>
+<script src="js/export.js?v=20260519"></script>
+<script src="js/app.js?v=20260519"></script>
+<script src="js/chat.js?v=20260519"></script>
 </body>
 </html>
