@@ -81,6 +81,18 @@ function otherUser() {
   return '';
 }
 
+// ===== ROLE CAPABILITIES =====
+// True if the signed-in user's role is in RESTRICTED_ROLES (config.js). Restricted
+// users only see their own tasks and can't delete companies. See config.js for details.
+function isRestrictedUser() {
+  return (typeof RESTRICTED_ROLES !== 'undefined') &&
+         RESTRICTED_ROLES.indexOf(state.currentUser) !== -1;
+}
+// Company deletion is allowed for every recognized user except restricted ones.
+function canDeleteCompanies() {
+  return !isRestrictedUser();
+}
+
 function categoryClass(cat) {
   if(!cat) return 'Other';
   const c = cat.toLowerCase();

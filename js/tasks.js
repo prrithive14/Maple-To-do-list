@@ -93,6 +93,10 @@ function getFilteredTasks() {
   const reviewFilter = document.getElementById('filterReview')?.value || '';
   var me = getCurrentUser();
   return state.tasks.filter(t => {
+    // Restricted users only ever see tasks assigned to them — enforced regardless of
+    // the assignee dropdown (which is hidden for them). Keep this first so no other
+    // filter branch can widen their view.
+    if (isRestrictedUser() && (t.assignee || '') !== me) return false;
     // Scope filter — 'all' option was removed; only 'company' or 'personal' apply.
     if(state.taskScope === 'company' && !t.companyId) return false;
     if(state.taskScope === 'personal' && t.companyId) return false;

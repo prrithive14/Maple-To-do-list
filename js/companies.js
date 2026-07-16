@@ -326,7 +326,9 @@ function openCompanyModal(id) {
     const el = document.getElementById('c' + suffix);
     if (el) el.value = c[fieldMap[suffix]] || '';
   });
-  document.getElementById('cDelete').style.display = id ? 'inline-flex' : 'none';
+  // Delete is only shown when editing an existing company AND the user is allowed
+  // to delete companies (restricted users never see it).
+  document.getElementById('cDelete').style.display = (id && canDeleteCompanies()) ? 'inline-flex' : 'none';
   document.getElementById('visitSection').style.display = id ? 'block' : 'none';
   if(id) renderVisitsForCompany(id);
   if(id && c.name) renderCompanyFiles(c.name);
@@ -358,6 +360,9 @@ async function saveCompany() {
 async function deleteCompany() {
   const c = state.editingCompany;
   if (!c) return;
+  // Defense in depth — the button is hidden for restricted users, but block the
+  // action itself too in case it's triggered another way.
+  if (!canDeleteCompanies()) { toast('You do not have permission to delete companies', true); return; }
 
   const linkedTasks = state.tasks.filter(t => t.companyId === c.id);
   const linkedVisits = state.visits.filter(v => v.companyId === c.id);

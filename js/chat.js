@@ -148,6 +148,7 @@
           <select data-field="assignee">
             <option${t.assignee==='Prrithive'?' selected':''}>Prrithive</option>
             <option${t.assignee==='Sridharan'?' selected':''}>Sridharan</option>
+            <option${t.assignee==='Satya'?' selected':''}>Satya</option>
             <option${t.assignee==='Both'?' selected':''}>Both</option>
           </select>
           <input type="date" data-field="date" value="${esc(t.date)}">
@@ -523,7 +524,9 @@
         today: new Date().toISOString().slice(0,10),
         user: getCurrentUser(),
         companies: state.companies.map(function(c) { return { id: c.id, name: c.name }; }),
-        tasks: state.tasks.map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee, taskType: t.taskType || 'daily', reviewer: t.reviewer || '', reviewStatus: t.reviewStatus || '' }; }),
+        // Restricted users only get their OWN tasks in the AI context, so the assistant
+        // can't surface other users' tasks to them.
+        tasks: (isRestrictedUser() ? state.tasks.filter(function(t){ return (t.assignee || '') === getCurrentUser(); }) : state.tasks).map(function(t) { return { id: t.id, name: t.name, status: t.status, date: t.date, companyId: t.companyId, priority: t.priority, category: t.category, assignee: t.assignee, taskType: t.taskType || 'daily', reviewer: t.reviewer || '', reviewStatus: t.reviewStatus || '' }; }),
         visits: state.visits.slice(-50).map(function(v) { return { date: v.date, type: v.type, companyId: v.companyId, outcome: v.outcome, loggedBy: v.loggedBy }; }),
         categoryGuide: 'Categories: "Sales" (default for company-linked tasks), "Marketing" (LinkedIn, website, content), "Admin" (domain, billing, email setup, GST, taxes), "PR Application" (Express Entry, immigration), "Personal", "Learning" (courses, research), "Other". companyId is OPTIONAL — leave blank for personal/business-ops tasks.',
         reviewGuide: 'Review workflow: tasks can have reviewer="Prrithive"|"Sridharan" and reviewStatus=""|"pending"|"changes_requested"|"approved". Use request_review to ask someone to review, respond_to_review to approve or request changes. Only the named reviewer can approve or request changes. Only the task assignee can re-request review after changes.'

@@ -39,4 +39,12 @@ const USER_EMAILS = {
   'prrithive@gmail.com': 'Prrithive',
   'sridharanbalaiyan@gmail.com': 'Sridharan',
   'prrithive1@gmail.com': 'Prrithive',
+  'satyaveeravenkataramana17@gmail.com': 'Satya',
 };
+
+// Restricted roles get a locked-down view: they only ever see their OWN tasks and
+// cannot delete companies (they CAN still delete/archive their own tasks). Enforced
+// via the isRestrictedUser()/canDeleteCompanies() helpers in state.js, and applied in
+// getFilteredTasks (task board + calendar), openCompanyModal/deleteCompany, and the
+// chat AI context. To lock down another user, add their role name here.
+const RESTRICTED_ROLES = ['Satya'];

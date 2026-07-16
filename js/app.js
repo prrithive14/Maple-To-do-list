@@ -104,6 +104,11 @@ function applyMyTasksDefault() {
   if (sel) {
     sel.value = 'me';
     state.taskAssigneeFilter = 'me';
+    // Restricted users can't change scope — they only ever see their own tasks
+    // (enforced in getFilteredTasks), so hide the assignee dropdown entirely.
+    if (typeof isRestrictedUser === 'function' && isRestrictedUser()) {
+      sel.style.display = 'none';
+    }
     if (typeof renderTaskView === 'function') renderTaskView();
   }
 }
