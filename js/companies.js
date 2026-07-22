@@ -41,7 +41,7 @@ function companyWebsiteLinkHtml(companyObj) {
 
 // A task is "active" if it's In progress or Not started
 function coGetActiveTasksForCompany(companyId) {
-  return state.tasks.filter(function(t){
+  return visibleTasks().filter(function(t){
     return t.companyId === companyId && (t.status === 'In progress' || t.status === 'Not started');
   });
 }
@@ -231,7 +231,7 @@ function renderCompanies() {
       var reason = entry.reason;
       var nv = coFormatNextVisit(c.id);
       var lastVisit = state.visits.filter(function(v){ return v.companyId === c.id; }).sort(function(a,b){ return (b.date||'').localeCompare(a.date||''); })[0];
-      var taskCount = state.tasks.filter(function(t){ return t.companyId === c.id; }).length;
+      var taskCount = visibleTasks().filter(function(t){ return t.companyId === c.id; }).length;
       var webLink = companyWebsiteLinkHtml(c);
       var html = '<div class="company-card" onclick="openCompanyModal(\'' + c.id + '\')">';
       // Name with inline website globe icon

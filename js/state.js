@@ -93,6 +93,19 @@ function canDeleteCompanies() {
   return !isRestrictedUser();
 }
 
+// Base list for any DISPLAY read of tasks. Restricted users only ever see tasks
+// whose assignee is EXACTLY their own name (strict — no 'Both', no unassigned).
+// Every display read-site (task board, calendar, company pages, dashboard, counts)
+// bases off this so the restriction lives in one place. Mutation/lookup-by-id paths
+// that act on a specific known task do NOT use this.
+function visibleTasks() {
+  if (isRestrictedUser()) {
+    var me = getCurrentUser();
+    return state.tasks.filter(function(t){ return (t.assignee || '') === me; });
+  }
+  return state.tasks;
+}
+
 function categoryClass(cat) {
   if(!cat) return 'Other';
   const c = cat.toLowerCase();

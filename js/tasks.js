@@ -98,8 +98,13 @@ function getFilteredTasks() {
     // filter branch can widen their view.
     if (isRestrictedUser() && (t.assignee || '') !== me) return false;
     // Scope filter — 'all' option was removed; only 'company' or 'personal' apply.
-    if(state.taskScope === 'company' && !t.companyId) return false;
-    if(state.taskScope === 'personal' && t.companyId) return false;
+    // Restricted users are exempt: the assignee guard above already limits them to
+    // their own tasks, so skip the personal/company split and show them ALL of their
+    // tasks in one view regardless of the scope toggle.
+    if (!isRestrictedUser()) {
+      if(state.taskScope === 'company' && !t.companyId) return false;
+      if(state.taskScope === 'personal' && t.companyId) return false;
+    }
     // taskType tab filter — 'all' shows everything; otherwise exact match (blank treated as 'daily').
     if(state.taskTypeFilter && state.taskTypeFilter !== 'all' && (t.taskType || 'daily') !== state.taskTypeFilter) return false;
     if(search && !(t.name||'').toLowerCase().includes(search)) return false;
@@ -512,7 +517,7 @@ async function persistReviewChange(task, successMsg) {
 // ===== OVERDUE =====
 function getOverdueTasks() {
   const today = new Date(new Date().toDateString());
-  return state.tasks.filter(t => t.date && t.status !== 'Done' && new Date(t.date) < today);
+  return visibleTasks().filter(t => t.date && t.status !== 'Done' && new Date(t.date) < today);
 }
 
 function refreshOverdueAlert() {

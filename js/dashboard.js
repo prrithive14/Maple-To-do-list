@@ -41,7 +41,7 @@ function renderDashboard() {
 
   const today = new Date(); today.setHours(0,0,0,0);
   const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate()+7);
-  const due = state.tasks.filter(t => t.date && new Date(t.date) <= weekEnd && t.status !== 'Done').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const due = visibleTasks().filter(t => t.date && new Date(t.date) <= weekEnd && t.status !== 'Done').sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   document.getElementById('dueThisWeek').innerHTML = due.length ? due.slice(0,10).map(t => {
     const c = state.companies.find(x=>x.id===t.companyId); const overdue = new Date(t.date) < today;
     return `<div onclick="switchTab('tasks');setTimeout(()=>openTaskModal('${t.id}'),100)" style="display:flex;align-items:center;gap:10px;padding:8px;border-radius:var(--radius);cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--bg-sunken)'" onmouseout="this.style.background=''">
@@ -207,8 +207,8 @@ function computeStats() {
     pipelineValue: state.companies.reduce((s,c)=>s+Number(c.value||0),0),
     pipelineCount: state.companies.filter(c=>Number(c.value)>0).length,
     visitsThisWeek, visitsLastWeek,
-    openTasks: state.tasks.filter(t=>t.status!=='Done').length,
-    overdueTasks: state.tasks.filter(t=>t.date && new Date(t.date) < today && t.status!=='Done').length,
+    openTasks: visibleTasks().filter(t=>t.status!=='Done').length,
+    overdueTasks: visibleTasks().filter(t=>t.date && new Date(t.date) < today && t.status!=='Done').length,
     responseRate: visited ? Math.round((quotedPlus/visited)*100) : 0,
     winRate: quoted ? Math.round((won/quoted)*100) : 0,
   };

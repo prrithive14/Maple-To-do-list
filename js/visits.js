@@ -8,7 +8,7 @@ function renderVisitsForCompany(companyId) {
     ${v.notes?`<div class="visit-notes">${esc(v.notes)}</div>`:''}
     ${v.nextStep?`<div class="visit-next">→ ${esc(v.nextStep)}</div>`:''}
     <div style="font-size:11px;color:var(--ink-mute);margin-top:6px">Logged by ${esc(v.loggedBy||'—')}</div></div>`).join('') : '<div class="empty-mini">No visits logged yet</div>';
-  const tasks = state.tasks.filter(t=>t.companyId===companyId);
+  const tasks = visibleTasks().filter(t=>t.companyId===companyId);
   document.getElementById('linkedTasks').innerHTML = tasks.length ? tasks.map(t => `<div class="linked-task" onclick="closeCompanyModal();openTaskModal('${t.id}')">
     <span class="status-pill status-${t.status==='Done'?'Won':'Prospect'}">${esc(t.status)}</span><span>${esc(t.name)}</span>
     ${t.date?`<span style="margin-left:auto;font-size:11px;color:var(--ink-mute)">${formatDate(t.date)}</span>`:''}</div>`).join('') : '<div class="empty-mini">No linked tasks</div>';

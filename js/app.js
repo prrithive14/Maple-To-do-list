@@ -34,7 +34,7 @@ function refreshAll() {
 }
 function refreshTaskCount() {
   // taskScope is always 'company' or 'personal' now (the 'all' option was removed).
-  const scopedCount = state.tasks.filter(t => {
+  const scopedCount = visibleTasks().filter(t => {
     if(state.taskScope === 'company') return !!t.companyId;
     return !t.companyId; // 'personal'
   }).length;
@@ -42,7 +42,7 @@ function refreshTaskCount() {
 }
 function populateFilterOptions() {
   // Categories actually used in existing tasks
-  const usedCats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
+  const usedCats = [...new Set(visibleTasks().map(t => t.category).filter(Boolean))];
 
   // Filter dropdown ("All categories ▾") — only shows what's actually in use,
   // since filtering by an empty category yields zero results.
