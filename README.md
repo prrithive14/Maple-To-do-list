@@ -73,7 +73,7 @@ js/
   tasks.js              Task CRUD, kanban, calendar view, overdue mgmt, review workflow
   companies.js          Company CRUD, list/grid, sort, pagination, cascade delete
   visits.js             Visit CRUD per company
-  archive.js            Auto-archive, manual archive, restore, deleted/archive view
+  archive.js            Manual archive, restore, deleted/archive view
   visitprep.js          Visit Prep checklists, priority scoring, search, PDF export
   dashboard.js          Dashboard tab — pipeline, stats, "Your plate" panel
   chat.js               Chat agent UI, tool execution, meeting mode, batch confirmation
@@ -170,7 +170,9 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
 - Per-item notes + file uploads (`Visit Prep/<companyName>/<itemName>/`), countdown, lead rating, PDF export
 
 ### Archive
-- Auto-archive Done tasks after 2 days; manual archive; restore (status flips Done→Not started)
+- Manual archive only — tasks are never auto-archived. Done tasks older than 2 days drop
+  off the kanban board but stay in the Tasks sheet and remain visible in the calendar view
+- Restore from the Archive tab (status flips Done→Not started)
 - Cascade-deleted company tasks land here too
 
 ### Library (Learning)

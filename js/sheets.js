@@ -248,7 +248,6 @@ async function pullAll() {
     state.dailyLog = dlRows.filter(function(r){return r[0];}).map(function(r){return rowToObj(r, DAILYLOG_COLS);});
     cacheLocal(); refreshAll();
     setSync('connected','Synced '+new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
-    autoArchiveOldDone();
   } catch(e) {
     console.error(e);
     if (e instanceof PermissionError) {

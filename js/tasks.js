@@ -141,10 +141,26 @@ function getFilteredTasks() {
 }
 
 // ===== KANBAN =====
+// Days a Done task keeps its slot in the kanban's Done column. Past this it drops out
+// of the board to stop it piling up, but the task itself is NOT archived or deleted —
+// it stays in state.tasks and remains visible in the calendar view on its date.
+const DONE_KANBAN_DAYS = 2;
+
+// True for a completed task old enough to have aged out of the kanban board.
+// Uses updatedAt (when it was last touched, i.e. marked Done); tasks with no
+// updatedAt are never aged out, since we can't tell how old they are.
+// A Done task with no date is also never aged out — the calendar's Unscheduled panel
+// skips Done tasks, so dropping it from the kanban would hide it from every view.
+function isAgedDone(t) {
+  if ((t.status || '') !== 'Done' || !t.updatedAt || !t.date) return false;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - DONE_KANBAN_DAYS);
+  return t.updatedAt < cutoff.toISOString();
+}
+
 function renderKanban() {
   const root = document.getElementById('kanban');
   const statuses = ['Not started','In progress','Done','Blocked'];
-  const filtered = getFilteredTasks();
+  const filtered = getFilteredTasks().filter(t => !isAgedDone(t));
   root.innerHTML = statuses.map(s => {
     const tasks = filtered.filter(t => (t.status||'Not started') === s);
     return `<div class="column" data-status="${s}" ondragover="event.preventDefault()" ondrop="onDrop(event,'${s}')">

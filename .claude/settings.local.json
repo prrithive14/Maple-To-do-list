@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:developers.google.com)"
+      "WebFetch(domain:developers.google.com)",
+      "Bash(node --check js/tasks.js)",
+      "Bash(node --check js/archive.js)",
+      "Bash(node --check js/sheets.js)"
     ]
   }
 }

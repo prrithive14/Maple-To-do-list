@@ -30,20 +30,10 @@ async function restoreTask(taskId) {
   return t;
 }
 
-async function autoArchiveOldDone() {
-  // Auto-archive Done tasks older than 2 days. Done tasks within the buffer stay
-  // visible in the kanban so recently-completed work can still be reviewed/undone.
-  // To restore an archived task, use the Archive tab → Restore button.
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 2);
-  const cutoffStr = cutoff.toISOString();
-  const toArchive = state.tasks.filter(t => t.status === 'Done' && t.updatedAt && t.updatedAt < cutoffStr);
-  if (toArchive.length === 0) return;
-  for (const t of toArchive) {
-    try { await archiveTask(t.id, 'completed'); } catch (e) { console.error('Auto-archive failed for', t.id, e); }
-  }
-  toast(`Auto-archived ${toArchive.length} completed task${toArchive.length > 1 ? 's' : ''}`);
-  refreshAll(); cacheLocal();
-}
+// NOTE: auto-archiving of old Done tasks was removed. Completed tasks now stay in the
+// Tasks sheet indefinitely — they simply drop out of the kanban after DONE_KANBAN_DAYS
+// (see isAgedDone() in tasks.js) while remaining visible in the calendar view.
+// Archiving is manual only: the Archive button in the task modal, or Delete.
 
 async function manualArchiveTask() {
   const t = state.editingTask; if (!t) return;
@@ -68,7 +58,7 @@ function renderArchive() {
     return true;
   }).sort((a, b) => (b.archivedAt || '').localeCompare(a.archivedAt || ''));
   if (filtered.length === 0) {
-    root.innerHTML = '<div class="empty"><h3>No archived tasks</h3><p>Completed tasks auto-archive after 2 days. Deleted tasks also appear here.</p></div>'; return;
+    root.innerHTML = '<div class="empty"><h3>No archived tasks</h3><p>Tasks you archive from the task modal appear here. Deleted tasks do too.</p></div>'; return;
   }
   root.innerHTML = `<div class="company-table"><table>
     <thead><tr><th>Task</th><th>Status</th><th>Reason</th><th>Archived</th><th>Due date</th><th>Company</th><th></th></tr></thead>
