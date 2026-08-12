@@ -170,9 +170,10 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
 - Per-item notes + file uploads (`Visit Prep/<companyName>/<itemName>/`), countdown, lead rating, PDF export
 
 ### Archive
-- Manual archive only — tasks are never auto-archived. Done tasks older than 1 day drop
-  off the kanban board but stay in the Tasks sheet and remain visible in the calendar view
-  (on their date, or in the Unscheduled panel if they have none)
+- Manual archive only — tasks are never auto-archived. Done tasks drop off the kanban
+  board immediately (`DONE_KANBAN_DAYS = 0` in tasks.js — raise it to give them a grace
+  period) but stay in the Tasks sheet and remain visible in the calendar view (on their
+  date, or in the Unscheduled panel if they have none)
 - Restore from the Archive tab (status flips Done→Not started)
 - "Restore all archived" bulk-restores everything except deliberate deletions
   (`deleted` / `company_deleted`), preserving each task's original status

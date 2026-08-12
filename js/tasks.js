@@ -145,13 +145,21 @@ function getFilteredTasks() {
 // of the board to stop it piling up, but the task itself is NOT archived or deleted —
 // it stays in state.tasks and remains visible in the calendar view (on its date, or in
 // the Unscheduled panel if it has no date).
-const DONE_KANBAN_DAYS = 1;
+//
+// 0 = hide completed tasks from the board immediately (current setting). Set to 1, 2, …
+// to give them a grace period on the board again — that's the only line to change.
+const DONE_KANBAN_DAYS = 0;
 
-// True for a completed task old enough to have aged out of the kanban board.
-// Uses updatedAt (when it was last touched, i.e. marked Done); tasks with no
-// updatedAt are never aged out, since we can't tell how old they are.
+// True for a completed task that should not appear on the kanban board.
 function isAgedDone(t) {
-  if ((t.status || '') !== 'Done' || !t.updatedAt) return false;
+  if ((t.status || '') !== 'Done') return false;
+  // No grace period: every Done task is hidden the moment it's completed. Checked
+  // before the updatedAt guard below so tasks missing a timestamp are hidden too —
+  // otherwise old rows with no updatedAt would linger on the board forever.
+  if (DONE_KANBAN_DAYS <= 0) return true;
+  // Age check uses updatedAt (when it was last touched, i.e. marked Done). Tasks with
+  // no updatedAt aren't aged out, since we can't tell how old they are.
+  if (!t.updatedAt) return false;
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - DONE_KANBAN_DAYS);
   return t.updatedAt < cutoff.toISOString();
 }
@@ -162,10 +170,16 @@ function renderKanban() {
   const filtered = getFilteredTasks().filter(t => !isAgedDone(t));
   root.innerHTML = statuses.map(s => {
     const tasks = filtered.filter(t => (t.status||'Not started') === s);
+    // With DONE_KANBAN_DAYS at 0 the Done column is permanently empty, which looks
+    // broken next to a plain "No tasks". Say where completed work actually went.
+    // The column itself stays — it's the drop target for marking a task done.
+    const emptyMsg = (s === 'Done' && DONE_KANBAN_DAYS <= 0)
+      ? 'Drop here to complete.<br>Completed tasks appear in the calendar view.'
+      : 'No tasks';
     return `<div class="column" data-status="${s}" ondragover="event.preventDefault()" ondrop="onDrop(event,'${s}')">
       <div class="column-header"><div class="column-title"><span class="swatch"></span>${s}<span class="column-count">${tasks.length}</span></div>
         <button class="column-add" onclick="openTaskModal(null,'${s}')">+ Add</button></div>
-      <div class="cards">${tasks.map(t => renderCard(t)).join('') || '<div style="font-size:12px;color:var(--ink-mute);text-align:center;padding:20px">No tasks</div>'}</div></div>`;
+      <div class="cards">${tasks.map(t => renderCard(t)).join('') || '<div style="font-size:12px;color:var(--ink-mute);text-align:center;padding:20px;line-height:1.5">' + emptyMsg + '</div>'}</div></div>`;
   }).join('');
 }
 
