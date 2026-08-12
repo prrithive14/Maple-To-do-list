@@ -78,6 +78,34 @@ async function deleteRowById(tab, id) {
   });
 }
 
+// Bulk version of deleteRowById — removes many rows in ONE batchUpdate instead of one
+// round-trip per row. Requests inside a batchUpdate apply sequentially, so deleting a
+// row shifts every row below it up; we sort indexes descending so earlier deletes never
+// invalidate later ones. Returns the number of rows actually deleted.
+async function deleteRowsByIds(tab, ids) {
+  if (!ids || ids.length === 0) return 0;
+  const idSet = new Set(ids);
+  const rows = await sheetsRead(`${tab}!A2:A`);
+  const indexes = [];
+  for (let i = 0; i < rows.length; i++) { if (idSet.has(rows[i][0])) indexes.push(i + 2); }
+  if (indexes.length === 0) return 0;
+  indexes.sort((a, b) => b - a);
+  const meta = await fetchSheetsMeta('sheets(properties(sheetId,title))');
+  const sheet = meta.sheets.find(s => s.properties.title === tab);
+  if (!sheet) return 0;
+  const sheetId = sheet.properties.sheetId;
+  const requests = indexes.map(idx => ({
+    deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: idx - 1, endIndex: idx } }
+  }));
+  const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}:batchUpdate`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests })
+  });
+  if (!r.ok) throw new Error('Bulk delete failed: '+r.status);
+  return indexes.length;
+}
+
 // Auto-create the Deleted sheet tab if it doesn't exist
 async function ensureDeletedSheet() {
   const meta = await fetchSheetsMeta('sheets(properties(title))');

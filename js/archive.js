@@ -30,6 +30,50 @@ async function restoreTask(taskId) {
   return t;
 }
 
+// One-off cleanup for tasks that the old auto-archiver swept into the Deleted sheet.
+// Unlike restoreTask(), this KEEPS status as 'Done' — these were completed work, and the
+// whole point of bringing them back is to see them on their original date in the calendar.
+// Flipping them to 'Not started' would resurrect them as open work on the kanban.
+// Writes in two batched API calls (one append, one delete) rather than 2N.
+async function restoreAllAutoArchived() {
+  const toRestore = state.deleted.filter(a => a.archiveReason === 'completed');
+  if (toRestore.length === 0) { toast('No auto-archived tasks to restore'); return; }
+  if (!confirm(`Restore ${toRestore.length} auto-archived task${toRestore.length > 1 ? 's' : ''} back into Tasks?\n\nThey keep their "Done" status, so they show in the calendar on their original date and stay off the kanban board.`)) return;
+
+  // Skip any whose id is somehow already live in Tasks — restoring would duplicate it.
+  const liveIds = new Set(state.tasks.map(t => t.id));
+  const fresh = toRestore.filter(a => !liveIds.has(a.id));
+  const skipped = toRestore.length - fresh.length;
+
+  try {
+    if (fresh.length > 0) {
+      const rows = fresh.map(a => {
+        const t = {};
+        TASK_COLS.forEach(col => t[col] = a[col] || '');
+        return objToRow(t, TASK_COLS);
+      });
+      await sheetsAppend('Tasks!A1', rows);
+      fresh.forEach(a => {
+        const t = {};
+        TASK_COLS.forEach(col => t[col] = a[col] || '');
+        state.tasks.push(t);
+      });
+    }
+    // Clear the Deleted rows for everything we handled, including ids skipped as
+    // duplicates — leaving those behind would re-offer them on the next click.
+    const handledIds = toRestore.map(a => a.id);
+    await deleteRowsByIds(SHEET_TABS.deleted, handledIds);
+    const handled = new Set(handledIds);
+    state.deleted = state.deleted.filter(a => !handled.has(a.id));
+
+    refreshAll(); cacheLocal();
+    toast(`Restored ${fresh.length} task${fresh.length !== 1 ? 's' : ''}` + (skipped > 0 ? ` (${skipped} skipped — already in Tasks)` : ''));
+  } catch (e) {
+    console.error('Bulk restore failed', e);
+    toast('Bulk restore failed: ' + e.message + ' — reload to resync', true);
+  }
+}
+
 // NOTE: auto-archiving of old Done tasks was removed. Completed tasks now stay in the
 // Tasks sheet indefinitely — they simply drop out of the kanban after DONE_KANBAN_DAYS
 // (see isAgedDone() in tasks.js) while remaining visible in the calendar view.
@@ -50,6 +94,14 @@ async function handleRestore(taskId) {
 
 function renderArchive() {
   const root = document.getElementById('archiveContainer'); if (!root) return;
+  // Bulk-restore button: only offered while auto-archived leftovers actually exist.
+  // Set before the empty-state early-return below so it can't get stranded visible.
+  const bulkBtn = document.getElementById('restoreAllBtn');
+  if (bulkBtn) {
+    const autoCount = state.deleted.filter(a => a.archiveReason === 'completed').length;
+    bulkBtn.style.display = autoCount > 0 ? '' : 'none';
+    bulkBtn.textContent = `↩ Restore all auto-archived (${autoCount})`;
+  }
   const search = (document.getElementById('archiveSearch')?.value || '').toLowerCase();
   const reason = document.getElementById('filterArchiveReason')?.value || '';
   const filtered = state.deleted.filter(a => {
