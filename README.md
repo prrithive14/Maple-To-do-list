@@ -174,6 +174,8 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
   off the kanban board but stay in the Tasks sheet and remain visible in the calendar view
   (on their date, or in the Unscheduled panel if they have none)
 - Restore from the Archive tab (status flips Done→Not started)
+- "Restore all archived" bulk-restores everything except deliberate deletions
+  (`deleted` / `company_deleted`), preserving each task's original status
 - Cascade-deleted company tasks land here too
 
 ### Library (Learning)

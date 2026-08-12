@@ -30,15 +30,34 @@ async function restoreTask(taskId) {
   return t;
 }
 
-// One-off cleanup for tasks that the old auto-archiver swept into the Deleted sheet.
-// Unlike restoreTask(), this KEEPS status as 'Done' — these were completed work, and the
-// whole point of bringing them back is to see them on their original date in the calendar.
-// Flipping them to 'Not started' would resurrect them as open work on the kanban.
+// Archive reasons that represent a DELIBERATE removal rather than housekeeping.
+// Bulk restore skips these on purpose: the user chose to get rid of them, and
+// 'company_deleted' rows belong to companies that no longer exist, so restoring
+// them would leave tasks pointing at a dead companyId.
+const INTENTIONAL_DELETE_REASONS = ['deleted', 'company_deleted'];
+
+function isBulkRestorable(a) {
+  return INTENTIONAL_DELETE_REASONS.indexOf(a.archiveReason) === -1;
+}
+
+// Bulk-restores every archived task that wasn't deliberately deleted — auto-archived
+// completions, manual archives, and legacy rows with no reason recorded.
+//
+// Unlike restoreTask(), this PRESERVES the original status instead of flipping
+// Done → Not started. That flip makes sense for restoring one task you want to work on
+// again; here it would resurrect months of finished work as open kanban cards. Keeping
+// status intact means Done tasks land in the calendar on their original date and — being
+// older than DONE_KANBAN_DAYS — stay off the board, which is the point of the restore.
+//
 // Writes in two batched API calls (one append, one delete) rather than 2N.
-async function restoreAllAutoArchived() {
-  const toRestore = state.deleted.filter(a => a.archiveReason === 'completed');
-  if (toRestore.length === 0) { toast('No auto-archived tasks to restore'); return; }
-  if (!confirm(`Restore ${toRestore.length} auto-archived task${toRestore.length > 1 ? 's' : ''} back into Tasks?\n\nThey keep their "Done" status, so they show in the calendar on their original date and stay off the kanban board.`)) return;
+async function restoreAllArchived() {
+  const toRestore = state.deleted.filter(isBulkRestorable);
+  if (toRestore.length === 0) { toast('Nothing to restore'); return; }
+  const skippedDeletes = state.deleted.length - toRestore.length;
+  if (!confirm(`Restore ${toRestore.length} archived task${toRestore.length > 1 ? 's' : ''} back into Tasks?\n\n` +
+    `They keep their original status, so completed ones appear in the calendar on their date and stay off the kanban board.\n\n` +
+    (skippedDeletes > 0 ? `${skippedDeletes} deliberately deleted task${skippedDeletes > 1 ? 's' : ''} will be left in the archive.\n\n` : '') +
+    `This rewrites the Tasks sheet and can't be undone.`)) return;
 
   // Skip any whose id is somehow already live in Tasks — restoring would duplicate it.
   const liveIds = new Set(state.tasks.map(t => t.id));
@@ -98,9 +117,9 @@ function renderArchive() {
   // Set before the empty-state early-return below so it can't get stranded visible.
   const bulkBtn = document.getElementById('restoreAllBtn');
   if (bulkBtn) {
-    const autoCount = state.deleted.filter(a => a.archiveReason === 'completed').length;
-    bulkBtn.style.display = autoCount > 0 ? '' : 'none';
-    bulkBtn.textContent = `↩ Restore all auto-archived (${autoCount})`;
+    const restorableCount = state.deleted.filter(isBulkRestorable).length;
+    bulkBtn.style.display = restorableCount > 0 ? '' : 'none';
+    bulkBtn.textContent = `↩ Restore all archived (${restorableCount})`;
   }
   const search = (document.getElementById('archiveSearch')?.value || '').toLowerCase();
   const reason = document.getElementById('filterArchiveReason')?.value || '';
@@ -116,7 +135,7 @@ function renderArchive() {
     <thead><tr><th>Task</th><th>Status</th><th>Reason</th><th>Archived</th><th>Due date</th><th>Company</th><th></th></tr></thead>
     <tbody>${filtered.map(a => {
       const co = state.companies.find(c => c.id === a.companyId);
-      const reasonLabel = a.archiveReason === 'completed' ? '✅ Auto' : a.archiveReason === 'deleted' ? '🗑️ Deleted' : a.archiveReason === 'manual' ? '📦 Manual' : '—';
+      const reasonLabel = a.archiveReason === 'completed' ? '✅ Auto' : a.archiveReason === 'deleted' ? '🗑️ Deleted' : a.archiveReason === 'company_deleted' ? '🏢 Company removed' : a.archiveReason === 'manual' ? '📦 Manual' : '—';
       return `<tr>
         <td><div class="company-name-cell">${esc(a.name)}</div>${a.category ? '<div class="company-industry">' + esc(a.category) + '</div>' : ''}</td>
         <td><span class="status-pill status-${a.status === 'Done' ? 'Won' : 'Prospect'}">${esc(a.status)}</span></td>
