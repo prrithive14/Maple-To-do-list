@@ -143,16 +143,15 @@ function getFilteredTasks() {
 // ===== KANBAN =====
 // Days a Done task keeps its slot in the kanban's Done column. Past this it drops out
 // of the board to stop it piling up, but the task itself is NOT archived or deleted —
-// it stays in state.tasks and remains visible in the calendar view on its date.
-const DONE_KANBAN_DAYS = 2;
+// it stays in state.tasks and remains visible in the calendar view (on its date, or in
+// the Unscheduled panel if it has no date).
+const DONE_KANBAN_DAYS = 1;
 
 // True for a completed task old enough to have aged out of the kanban board.
 // Uses updatedAt (when it was last touched, i.e. marked Done); tasks with no
 // updatedAt are never aged out, since we can't tell how old they are.
-// A Done task with no date is also never aged out — the calendar's Unscheduled panel
-// skips Done tasks, so dropping it from the kanban would hide it from every view.
 function isAgedDone(t) {
-  if ((t.status || '') !== 'Done' || !t.updatedAt || !t.date) return false;
+  if ((t.status || '') !== 'Done' || !t.updatedAt) return false;
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - DONE_KANBAN_DAYS);
   return t.updatedAt < cutoff.toISOString();
 }
@@ -246,12 +245,16 @@ function renderCalendar() {
       }).join('') || ''}</div></div>`;
   }
   grid.innerHTML = html;
-  const noDate = filtered.filter(t => !t.date && t.status !== 'Done');
+  // Unscheduled panel. Open dateless tasks always belong here. Dateless DONE tasks are
+  // included too once they've aged off the kanban — they have no day cell to live in, so
+  // without this they'd be visible in neither view. Recently-done ones are still on the
+  // board, so listing them here as well would just duplicate them.
+  const noDate = filtered.filter(t => !t.date && (t.status !== 'Done' || isAgedDone(t)));
   let unsched = document.getElementById('calUnscheduled');
   if(!unsched) { unsched = document.createElement('div'); unsched.id = 'calUnscheduled'; document.getElementById('calendarView').appendChild(unsched); }
   unsched.innerHTML = noDate.length > 0 ? `<div class="cal-unscheduled"><div class="cal-unscheduled-title">📌 Unscheduled (${noDate.length})</div><div class="cal-day-tasks">${noDate.map(t => {
-    const cc = categoryClass(t.category);
-    return `<div class="cal-task cal-task-cat-${cc}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" ondragend="onCalDragEnd(event)" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
+    const cc = categoryClass(t.category); const isDone = t.status === 'Done';
+    return `<div class="cal-task cal-task-cat-${cc}${isDone?' done':''}" draggable="true" ondragstart="onCalDragStart(event,'${t.id}')" ondragend="onCalDragEnd(event)" onclick="openTaskModal('${t.id}')" title="${esc(t.name)}">${esc(t.name)}</div>`;
   }).join('')}</div></div>` : '';
 }
 
