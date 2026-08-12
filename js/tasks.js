@@ -183,6 +183,77 @@ function renderKanban() {
   }).join('');
 }
 
+// ===== BULK: MARK EVERY TASK DONE =====
+// Destructive, one-way bulk edit: sets status = 'Done' on every task in the sheet.
+// Original statuses are NOT recoverable afterwards — there's no undo and no snapshot.
+// Lives in Settings rather than the task bar so it can't be hit by accident.
+//
+// Writes only the status and updatedAt COLUMNS rather than whole rows. Rewriting rows
+// from local state would push our possibly-stale copies of notes/links/review fields
+// over whatever is in the sheet; a column-scoped write can only touch what it claims to.
+async function markAllTasksDone() {
+  if (!accessToken) { toast('Not signed in', true); return; }
+  const total = state.tasks.length;
+  if (total === 0) { toast('No tasks to update'); return; }
+  const pending = state.tasks.filter(t => (t.status || '') !== 'Done').length;
+  if (pending === 0) { toast('Every task is already Done'); return; }
+
+  if (!confirm(`Mark ALL ${total} task${total > 1 ? 's' : ''} as Done?\n\n` +
+    `${pending} are not currently Done — including any that are Not started, In progress or Blocked.\n\n` +
+    `Their original statuses will be overwritten and CANNOT be recovered. The kanban board will be empty; ` +
+    `everything moves to the calendar view.\n\nMake a copy of the spreadsheet first if you might want this back.`)) return;
+  // Second gate — the first dialog is easy to click through on muscle memory.
+  if (!confirm(`Last check: this permanently overwrites ${pending} task status${pending > 1 ? 'es' : ''}. Continue?`)) return;
+
+  try {
+    setSync('', 'Updating…');
+    // Read ids in SHEET order — local state order does not match the sheet's, and the
+    // column write below is positional. This is the one source of truth for alignment.
+    const idRows = await sheetsRead(`${SHEET_TABS.tasks}!A2:A`);
+    const lastRow = idRows.length + 1;  // +1 for the header row
+    if (idRows.length === 0) { toast('No rows found in the Tasks sheet'); setSync('connected', 'Connected'); return; }
+
+    const statusCol = colLetter(TASK_COLS.indexOf('status') + 1);      // 'C'
+    const updatedCol = colLetter(TASK_COLS.indexOf('updatedAt') + 1);  // 'M'
+    const stamp = nowIso();
+    const byId = {};
+    state.tasks.forEach(t => { byId[t.id] = t; });
+
+    const statusValues = [];
+    const updatedValues = [];
+    idRows.forEach(row => {
+      const id = row[0];
+      const existing = byId[id];
+      const alreadyDone = existing && (existing.status || '') === 'Done';
+      statusValues.push(['Done']);
+      // Only restamp rows we actually changed — otherwise this wipes the real
+      // last-modified time on tasks that were already complete.
+      updatedValues.push([alreadyDone && existing.updatedAt ? existing.updatedAt : stamp]);
+    });
+
+    await sheetsBatchWrite([
+      { range: `${SHEET_TABS.tasks}!${statusCol}2:${statusCol}${lastRow}`, values: statusValues },
+      { range: `${SHEET_TABS.tasks}!${updatedCol}2:${updatedCol}${lastRow}`, values: updatedValues },
+    ]);
+
+    // Mirror the same edit locally so the UI is correct without a full re-pull.
+    state.tasks.forEach(t => {
+      if ((t.status || '') !== 'Done') { t.status = 'Done'; t.updatedAt = stamp; }
+    });
+
+    // The kanban is now empty by definition — drop the user on the calendar so they
+    // land on the view that actually has their data.
+    if (typeof setTaskView === 'function') setTaskView('calendar');
+    refreshAll(); cacheLocal();
+    setSync('connected', 'Connected');
+    toast(`Marked ${pending} task${pending > 1 ? 's' : ''} as Done`);
+  } catch (e) {
+    console.error('markAllTasksDone failed', e);
+    setSync('error', 'Update failed');
+    toast('Failed to mark tasks done: ' + e.message + ' — reload to resync', true);
+  }
+}
+
 function renderCard(t) {
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';

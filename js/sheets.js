@@ -43,6 +43,22 @@ async function sheetsWrite(range, values) {
   if(!r.ok) throw new Error('Write failed: '+r.status);
 }
 
+// Writes several disjoint ranges in ONE request. Used for column-scoped bulk edits
+// (e.g. rewriting just the status column) where rewriting whole rows would risk
+// clobbering fields with stale local copies.
+// `data` is [{range: 'Tasks!C2:C50', values: [['Done'], ...]}, ...]
+async function sheetsBatchWrite(data) {
+  if (!data || data.length === 0) return;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values:batchUpdate`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ valueInputOption: 'RAW', data })
+  });
+  if(!r.ok) throw new Error('Batch write failed: '+r.status);
+  return await r.json();
+}
+
 async function sheetsAppend(range, values) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${cfg.sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
   const r = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer '+accessToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) });
