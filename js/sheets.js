@@ -283,6 +283,13 @@ async function pullAll() {
       showPermissionBanner();
       return;
     }
+    // A dropped connection is not a failure state the user needs to act on — the
+    // cached data is still on screen and auth.js's 'online' handler will resync.
+    // Only surface the loud error toast for genuine, online failures.
+    if (navigator.onLine === false) {
+      setSync('', 'Offline — cached data');
+      return;
+    }
     setSync('error','Sync failed'); toast('Sync failed: '+e.message, true);
   }
 }
