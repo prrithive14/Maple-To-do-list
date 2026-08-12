@@ -1099,3 +1099,13 @@ html[data-theme="dark"] .dl-month-pill { background:rgba(217,117,72,.18); }
   .dl-block { font-size:11px; }
   .dl-month-cell { min-height:70px; }
 }
+
+/* ===== STATUS FIX MODAL =====
+   Rows in the "Fix task statuses" recovery list. Whole row is a <label> so clicking
+   anywhere toggles the checkbox — the list is meant for fast bulk triage. */
+.statusfix-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:var(--bg-sunken);border-radius:var(--radius);cursor:pointer;border:1px solid transparent}
+.statusfix-row:hover{border-color:var(--line)}
+.statusfix-row input[type=checkbox]{margin-top:3px;flex-shrink:0;cursor:pointer}
+.statusfix-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.statusfix-name{font-size:13px;font-weight:500;color:var(--ink);word-break:break-word}
+.statusfix-meta{font-size:11px;color:var(--ink-mute)}

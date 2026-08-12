@@ -254,6 +254,128 @@ async function markAllTasksDone() {
   }
 }
 
+// ===== STATUS REPAIR =====
+// Recovery UI for tasks wrongly sitting in 'Not started'. The old restoreTask() rewrote
+// Done → Not started on restore, overwriting the only record that the task was ever
+// finished — so there is NO reliable way to detect the affected tasks after the fact.
+// Hence: this lists candidates and makes the user choose. Nothing is pre-ticked, because
+// guessing wrong marks genuinely unstarted work as complete, which is the same class of
+// silent data loss we're cleaning up.
+//
+// The one real hint available: a restore rewrites updatedAt, so everything flipped in a
+// given restore session shares an updatedAt date. That's what the date picker selects on.
+function openStatusFixModal() {
+  document.getElementById('statusFixModal').classList.add('open');
+  renderStatusFixList();
+}
+function closeStatusFixModal() { document.getElementById('statusFixModal').classList.remove('open'); }
+
+function renderStatusFixList() {
+  const list = document.getElementById('statusFixList');
+  // Restricted users only ever act on their own tasks — mirror the kanban's guard.
+  const me = getCurrentUser();
+  const candidates = state.tasks
+    .filter(t => (t.status || 'Not started') === 'Not started')
+    .filter(t => !isRestrictedUser() || (t.assignee || '') === me)
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+
+  if (candidates.length === 0) {
+    list.innerHTML = '<div class="empty-mini">No tasks are sitting in "Not started". 🎉</div>';
+    updateStatusFixCount();
+    return;
+  }
+  list.innerHTML = candidates.map(t => {
+    const co = state.companies.find(c => c.id === t.companyId);
+    const created = t.createdAt ? t.createdAt.slice(0, 10) : '—';
+    const updated = t.updatedAt ? t.updatedAt.slice(0, 10) : '—';
+    // A task created long before it was last touched is the shape a restored task has.
+    const suspect = t.createdAt && t.updatedAt && t.updatedAt.slice(0, 10) !== t.createdAt.slice(0, 10);
+    return `<label class="statusfix-row">
+      <input type="checkbox" class="statusfix-cb" data-taskid="${esc(t.id)}" data-updated="${esc(updated)}" onchange="updateStatusFixCount()">
+      <span class="statusfix-main">
+        <span class="statusfix-name">${esc(t.name)}</span>
+        <span class="statusfix-meta">
+          ${t.date ? 'due ' + formatDate(t.date) + ' · ' : ''}created ${created} · last changed ${updated}${suspect ? ' <strong>· edited after creation</strong>' : ''}${co ? ' · ' + esc(co.name) : ''}${t.assignee ? ' · ' + esc(t.assignee) : ''}
+        </span>
+      </span>
+    </label>`;
+  }).join('');
+  updateStatusFixCount();
+}
+
+function statusFixCheckboxes() {
+  return Array.prototype.slice.call(document.querySelectorAll('.statusfix-cb'));
+}
+
+function updateStatusFixCount() {
+  const n = statusFixCheckboxes().filter(cb => cb.checked).length;
+  const btn = document.getElementById('statusFixApplyBtn');
+  if (btn) { btn.textContent = n > 0 ? `Mark ${n} as Done` : 'Mark selected as Done'; btn.disabled = n === 0; }
+}
+
+function statusFixSelectAll(on) {
+  statusFixCheckboxes().forEach(cb => { cb.checked = on; });
+  updateStatusFixCount();
+}
+
+// Ticks everything last changed on the given day — i.e. everything touched by one
+// restore session, which is the cluster the user is almost always trying to fix.
+function statusFixSelectByDate() {
+  const d = document.getElementById('statusFixDate').value;
+  if (!d) { toast('Pick a date first'); return; }
+  let n = 0;
+  statusFixCheckboxes().forEach(cb => {
+    if (cb.dataset.updated === d) { cb.checked = true; n++; }
+  });
+  updateStatusFixCount();
+  toast(n > 0 ? `Selected ${n} task${n > 1 ? 's' : ''} last changed on ${d}` : `No tasks were last changed on ${d}`);
+}
+
+async function applyStatusFix() {
+  if (!accessToken) { toast('Not signed in', true); return; }
+  const ids = statusFixCheckboxes().filter(cb => cb.checked).map(cb => cb.dataset.taskid);
+  if (ids.length === 0) { toast('Nothing selected'); return; }
+  if (!confirm(`Set ${ids.length} task${ids.length > 1 ? 's' : ''} to Done?\n\nThey'll leave the kanban board and show in the calendar view instead.`)) return;
+
+  try {
+    setSync('', 'Updating…');
+    // Sheet row order is not local state order — resolve each id to its actual row.
+    const idRows = await sheetsRead(`${SHEET_TABS.tasks}!A2:A`);
+    const rowById = {};
+    idRows.forEach((r, i) => { if (r[0]) rowById[r[0]] = i + 2; });
+
+    const statusCol = colLetter(TASK_COLS.indexOf('status') + 1);
+    const updatedCol = colLetter(TASK_COLS.indexOf('updatedAt') + 1);
+    const stamp = nowIso();
+    const data = [];
+    const applied = [];
+    ids.forEach(id => {
+      const row = rowById[id];
+      if (!row) return;  // vanished from the sheet since load — skip rather than guess
+      data.push({ range: `${SHEET_TABS.tasks}!${statusCol}${row}`, values: [['Done']] });
+      data.push({ range: `${SHEET_TABS.tasks}!${updatedCol}${row}`, values: [[stamp]] });
+      applied.push(id);
+    });
+    if (data.length === 0) { toast('None of the selected tasks were found in the sheet — try Force sync', true); setSync('connected', 'Connected'); return; }
+
+    await sheetsBatchWrite(data);
+    applied.forEach(id => {
+      const t = state.tasks.find(x => x.id === id);
+      if (t) { t.status = 'Done'; t.updatedAt = stamp; }
+    });
+
+    const missed = ids.length - applied.length;
+    refreshAll(); cacheLocal();
+    setSync('connected', 'Connected');
+    renderStatusFixList();
+    toast(`Marked ${applied.length} task${applied.length !== 1 ? 's' : ''} as Done` + (missed > 0 ? ` (${missed} not found in sheet)` : ''));
+  } catch (e) {
+    console.error('applyStatusFix failed', e);
+    setSync('error', 'Update failed');
+    toast('Status fix failed: ' + e.message + ' — reload to resync', true);
+  }
+}
+
 function renderCard(t) {
   const company = state.companies.find(c=>c.id===t.companyId);
   const overdue = t.date && new Date(t.date) < new Date(new Date().toDateString()) && t.status !== 'Done';

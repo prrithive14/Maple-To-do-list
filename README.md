@@ -174,7 +174,9 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
   board immediately (`DONE_KANBAN_DAYS = 0` in tasks.js — raise it to give them a grace
   period) but stay in the Tasks sheet and remain visible in the calendar view (on their
   date, or in the Unscheduled panel if they have none)
-- Restore from the Archive tab (status flips Done→Not started)
+- Restore from the Archive tab — status is preserved (it used to flip Done→Not started,
+  which destroyed the record of completion; Settings → "Fix task statuses" repairs tasks
+  affected by the old behaviour)
 - "Restore all archived" bulk-restores everything except deliberate deletions
   (`deleted` / `company_deleted`), preserving each task's original status
 - Cascade-deleted company tasks land here too

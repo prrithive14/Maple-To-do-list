@@ -21,7 +21,11 @@ async function restoreTask(taskId) {
   if (!a) throw new Error("Archived task not found: " + taskId);
   const t = {};
   TASK_COLS.forEach(col => t[col] = a[col] || '');
-  t.status = (a.status === 'Done') ? 'Not started' : a.status;
+  // Status is preserved verbatim. This used to flip Done → 'Not started' on the theory
+  // that you'd only restore something you wanted to work on again — but it silently
+  // destroyed the record of the task ever having been completed, and there's no way to
+  // recover it afterwards. Restoring a completed task now keeps it completed; if you
+  // genuinely want to redo it, reopen it and change the status yourself.
   t.updatedAt = nowIso();
   await sheetsAppend('Tasks!A1', [objToRow(t, TASK_COLS)]);
   await deleteRowById(SHEET_TABS.deleted, taskId);
