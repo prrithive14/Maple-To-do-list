@@ -72,8 +72,21 @@ async function findRowIndex(tab, id) {
   return -1;
 }
 
+// Records when a task entered 'Done', and clears the stamp when it leaves.
+// Idempotent: re-saving an already-Done task keeps the ORIGINAL completion time, so
+// editing a finished task doesn't restart its kanban countdown.
+// Called from upsertRow rather than from each caller because status is assigned in a
+// dozen places (kanban drag, task modal, overdue modal, chat tools, bulk fixes) and any
+// one of them missing the stamp would silently break the disappear-after-a-day rule.
+function stampCompletion(t) {
+  if (!t) return;
+  if ((t.status || '') === 'Done') { if (!t.completedAt) t.completedAt = nowIso(); }
+  else if (t.completedAt) { t.completedAt = ''; }
+}
+
 async function upsertRow(tab, cols, obj) {
   if(!accessToken) throw new Error('Not signed in');
+  if (tab === SHEET_TABS.tasks) stampCompletion(obj);
   const row = objToRow(obj, cols);
   const existingIdx = state[tabKeyForName(tab)].some(x => x.id === obj.id) ? await findRowIndex(tab, obj.id) : -1;
   if(existingIdx > 0) { await sheetsWrite(`${tab}!A${existingIdx}:${colLetter(cols.length)}${existingIdx}`, [row]); }
@@ -255,6 +268,44 @@ async function migrateTaskTypeForTab(tab) {
   }
 }
 
+// Adds the completedAt column. Header-only — unlike taskType there is deliberately NO
+// backfill: a blank completedAt is a valid value meaning "unknown", and isAgedDone()
+// falls back to updatedAt for those rows. Backfilling a guessed timestamp would be worse
+// than the fallback, since it would look authoritative.
+// Must run AFTER ensureTaskTypeColumn so taskType already occupies its column and the
+// append lands in the position TASK_COLS/DELETED_COLS expect.
+async function ensureCompletedAtColumn() {
+  await migrateCompletedAtForTab('Tasks', TASK_COLS);
+  await migrateCompletedAtForTab('Deleted', DELETED_COLS);
+}
+
+async function migrateCompletedAtForTab(tab, cols) {
+  try {
+    const headerResp = await sheetsRead(`${tab}!1:1`);
+    const headerRow = (headerResp && headerResp[0]) ? headerResp[0] : [];
+    if (headerRow.indexOf('completedAt') !== -1) {
+      console.log(`Schema check: ${tab} completedAt column OK`);
+      return;
+    }
+    // Append after the last populated header, matching the taskType migration's approach.
+    const targetIdx = headerRow.length + 1;
+    const expectedIdx = cols.indexOf('completedAt') + 1;
+    if (targetIdx !== expectedIdx) {
+      // The sheet's column layout doesn't match what the code expects. Writing anyway
+      // would misalign every read, so bail loudly and leave the app on the updatedAt
+      // fallback rather than corrupting the sheet.
+      console.error(`Schema check: ${tab} header has ${headerRow.length} columns, expected ${expectedIdx - 1} — skipping completedAt migration to avoid misaligning columns`);
+      return;
+    }
+    await sheetsWrite(`${tab}!${colLetter(targetIdx)}1`, [['completedAt']]);
+    console.log(`Schema check: ${tab} completedAt column added at ${colLetter(targetIdx)}`);
+  } catch (e) {
+    // Never block boot. Without the column, completedAt stays blank everywhere and
+    // isAgedDone() uses updatedAt — the old behaviour, which is correct if imprecise.
+    console.error(`Schema check failed for ${tab} completedAt column:`, e);
+  }
+}
+
 async function pullAll() {
   if(!accessToken) return;
   setSync('syncing','Syncing…');
@@ -273,6 +324,8 @@ async function pullAll() {
       taskTypeMigrationChecked = true;
       try { await ensureTaskTypeColumn(); }
       catch (e) { console.error('taskType migration error:', e); }
+      try { await ensureCompletedAtColumn(); }
+      catch (e) { console.error('completedAt migration error:', e); }
     }
     const [tRows, cRows, vRows, dRows, vpRows, docRows, dlRows] = await Promise.all([
       sheetsRead('Tasks!A2:Z'),

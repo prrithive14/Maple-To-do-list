@@ -32,7 +32,6 @@ let state = {
 
 let cfg = { ...APP_CONFIG };
 let accessToken = null;
-let tokenClient = null;
 let syncing = false;
 let tokenRefreshTimer = null;
 

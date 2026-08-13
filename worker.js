@@ -418,11 +418,278 @@ const TOOLS = [
   }
 ];
 
+/* ============================================================================
+   AUTH BROKER  (/auth/exchange, /auth/token, /auth/logout)
+   ----------------------------------------------------------------------------
+   Why this exists: the app used to run Google's *implicit* token flow entirely in
+   the browser. That flow never issues a refresh token, and its access tokens die
+   after an hour and live in a JS variable — so every page refresh meant another
+   trip through One Tap / FedCM, which fails outright once third-party cookies are
+   blocked. Users got a "Sign in" button several times a day.
+
+   The authorization-code flow fixes that, but it needs a client secret, which a
+   static GitHub Pages site cannot hold. This Worker holds it. Split of trust:
+
+     browser  ->  a random session id in localStorage. Useless without this Worker.
+     Worker   ->  the client secret, and the refresh token in KV keyed by that id.
+
+   So the long-lived credential never reaches the browser, and a session is
+   independently revocable (delete the KV row) per device.
+
+   Bindings required (see the setup notes in README):
+     GOOGLE_CLIENT_ID      var     — same client id the front-end uses
+     GOOGLE_CLIENT_SECRET  secret  — from the same OAuth client
+     AUTH_SESSIONS         KV      — session id -> { refresh_token, email }
+     ALLOWED_EMAILS        var     — optional CSV allowlist, enforced at sign-in
+     SESSION_TTL_SECONDS   var     — optional, defaults to 24h
+   ========================================================================== */
+
+// One sign-in per device per day. This is a FIXED expiry, not a sliding one: the
+// clock starts at sign-in and is not extended by use, which is what "sign in once
+// a day" actually means. To make it sliding instead, re-PUT the record with a
+// fresh expirationTtl inside /auth/token.
+const SESSION_TTL_SECONDS_DEFAULT = 86400;
+const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
+const GOOGLE_REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
+
+function jsonResponse(body, status, corsHeaders) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
+  });
+}
+
+// 256 bits of CSPRNG, base64url. This is a bearer credential — it must not be
+// guessable and must not be derived from anything (email, time) an attacker knows.
+function newSessionId() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+// Read the email out of an id_token WITHOUT verifying the signature. That is safe
+// here and only here: this token came back over TLS directly from Google's token
+// endpoint in response to our own request, so there is no untrusted party in the
+// path. Never do this to an id_token that arrived from a client.
+function emailFromIdToken(idToken) {
+  try {
+    const payload = idToken.split(".")[1];
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    const claims = JSON.parse(json);
+    return (claims.email || "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+// Fallback identity lookup for when the token response carried no id_token.
+async function emailFromUserinfo(accessToken) {
+  if (!accessToken) return "";
+  try {
+    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: "Bearer " + accessToken }
+    });
+    if (!r.ok) return "";
+    const data = await r.json();
+    return (data.email || "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+// Optional server-side allowlist. The front-end already blocks unknown emails, but
+// that check runs in code the user controls — enforcing it here means an
+// unauthorized account never gets a persistent session at all.
+function emailAllowed(email, env) {
+  if (!env.ALLOWED_EMAILS) return true;
+  const allowed = env.ALLOWED_EMAILS.split(",").map(e => e.trim().toLowerCase()).filter(Boolean);
+  return allowed.length === 0 || allowed.includes(email);
+}
+
+async function revokeToken(token) {
+  if (!token) return;
+  try {
+    await fetch(GOOGLE_REVOKE_ENDPOINT + "?token=" + encodeURIComponent(token), { method: "POST" });
+  } catch {
+    // Best effort. The session row is deleted regardless, so the token is
+    // unreachable from this app even if Google never saw the revoke.
+  }
+}
+
+async function handleAuth(request, env, path, corsHeaders) {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    return jsonResponse({ error: "Worker not configured: GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET missing" }, 500, corsHeaders);
+  }
+  if (!env.AUTH_SESSIONS) {
+    return jsonResponse({ error: "Worker not configured: AUTH_SESSIONS KV binding missing" }, 500, corsHeaders);
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return jsonResponse({ error: "Invalid JSON" }, 400, corsHeaders); }
+
+  const ttl = Number(env.SESSION_TTL_SECONDS) > 0
+    ? Number(env.SESSION_TTL_SECONDS)
+    : SESSION_TTL_SECONDS_DEFAULT;
+
+  // ---- POST /auth/exchange — one-time, right after Google redirects back ----
+  if (path === "/auth/exchange") {
+    const { code, code_verifier, redirect_uri } = body;
+    if (!code || !code_verifier || !redirect_uri) {
+      return jsonResponse({ error: "code, code_verifier and redirect_uri are required" }, 400, corsHeaders);
+    }
+
+    const form = new URLSearchParams({
+      code,
+      code_verifier,
+      redirect_uri,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      grant_type: "authorization_code"
+    });
+
+    let tok;
+    try {
+      const r = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form
+      });
+      tok = await r.json();
+      if (!r.ok) return jsonResponse({ error: "token_exchange_failed", detail: tok }, 400, corsHeaders);
+    } catch (err) {
+      return jsonResponse({ error: "token_exchange_error", detail: String(err) }, 502, corsHeaders);
+    }
+
+    // No refresh token means the whole point of this endpoint failed. Google omits
+    // it when the user has already consented and the request didn't force a fresh
+    // consent — the client always sends prompt=consent to prevent exactly this.
+    if (!tok.refresh_token) {
+      await revokeToken(tok.access_token);
+      return jsonResponse({
+        error: "no_refresh_token",
+        detail: "Google returned no refresh token. The authorization request must include access_type=offline and prompt=consent."
+      }, 400, corsHeaders);
+    }
+
+    // id_token is the cheap path (it's already in the response), but it only exists
+    // if `openid` was among the requested scopes. Fall back to the userinfo endpoint
+    // rather than letting a scope change silently turn the allowlist into "deny all".
+    let email = emailFromIdToken(tok.id_token || "");
+    if (!email) email = await emailFromUserinfo(tok.access_token);
+
+    if (!emailAllowed(email, env)) {
+      // Deny before persisting anything, and hand the credentials straight back.
+      await revokeToken(tok.refresh_token);
+      await revokeToken(tok.access_token);
+      return jsonResponse({ error: "access_denied", email }, 403, corsHeaders);
+    }
+
+    const sid = newSessionId();
+    await env.AUTH_SESSIONS.put(
+      sid,
+      JSON.stringify({ refresh_token: tok.refresh_token, email }),
+      { expirationTtl: ttl }
+    );
+
+    return jsonResponse({
+      sid,
+      access_token: tok.access_token,
+      expires_in: tok.expires_in || 3600,
+      email,
+      session_ttl: ttl
+    }, 200, corsHeaders);
+  }
+
+  // ---- POST /auth/token — every page load and every hourly refresh ----
+  if (path === "/auth/token") {
+    const { sid } = body;
+    if (!sid) return jsonResponse({ error: "sid is required" }, 400, corsHeaders);
+
+    const raw = await env.AUTH_SESSIONS.get(sid);
+    // 401 is the ONLY status the client treats as "you are logged out". Everything
+    // else below is reported as a transient failure so a blip in Google's token
+    // endpoint doesn't bounce a working user back to the sign-in button.
+    if (!raw) return jsonResponse({ error: "session_expired" }, 401, corsHeaders);
+
+    let record;
+    try { record = JSON.parse(raw); }
+    catch { await env.AUTH_SESSIONS.delete(sid); return jsonResponse({ error: "session_corrupt" }, 401, corsHeaders); }
+
+    const form = new URLSearchParams({
+      refresh_token: record.refresh_token,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      grant_type: "refresh_token"
+    });
+
+    let tok;
+    try {
+      const r = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form
+      });
+      tok = await r.json();
+      if (!r.ok) {
+        // invalid_grant = the refresh token is dead for good (user revoked access,
+        // password change, or the 7-day expiry that Google applies while the OAuth
+        // consent screen is still in "Testing"). Nothing to retry — drop the session.
+        if (tok && tok.error === "invalid_grant") {
+          await env.AUTH_SESSIONS.delete(sid);
+          return jsonResponse({ error: "session_expired", detail: tok }, 401, corsHeaders);
+        }
+        return jsonResponse({ error: "refresh_failed", detail: tok }, 502, corsHeaders);
+      }
+    } catch (err) {
+      return jsonResponse({ error: "refresh_error", detail: String(err) }, 502, corsHeaders);
+    }
+
+    return jsonResponse({
+      access_token: tok.access_token,
+      expires_in: tok.expires_in || 3600,
+      email: record.email || ""
+    }, 200, corsHeaders);
+  }
+
+  // ---- POST /auth/logout — explicit sign-out, and the access-denied path ----
+  if (path === "/auth/logout") {
+    const { sid } = body;
+    if (!sid) return jsonResponse({ error: "sid is required" }, 400, corsHeaders);
+    const raw = await env.AUTH_SESSIONS.get(sid);
+    if (raw) {
+      try { await revokeToken(JSON.parse(raw).refresh_token); } catch {}
+      await env.AUTH_SESSIONS.delete(sid);
+    }
+    return jsonResponse({ ok: true }, 200, corsHeaders);
+  }
+
+  return jsonResponse({ error: "Unknown auth endpoint" }, 404, corsHeaders);
+}
+
+// ALLOWED_ORIGIN accepts a COMMA-SEPARATED list, because the app is reachable at
+// both crm.maplempss.com and prrithive14.github.io — pinning a single origin would
+// silently break sign-in and chat on the other one. We echo back the caller's own
+// origin when it matches (a wildcard can't be combined with credentials, and being
+// specific is correct regardless); unset falls back to "*", the previous behaviour.
+function resolveOrigin(request, env) {
+  if (!env.ALLOWED_ORIGIN) return "*";
+  const allowed = env.ALLOWED_ORIGIN.split(",").map(o => o.trim()).filter(Boolean);
+  if (allowed.includes("*")) return "*";
+  const origin = request.headers.get("Origin") || "";
+  // Falling back to allowed[0] on a non-match keeps the response well-formed; the
+  // browser rejects it, which is the intended outcome for an unlisted origin.
+  return allowed.includes(origin) ? origin : (allowed[0] || "*");
+}
+
 export default {
   async fetch(request, env) {
-    const allowedOrigin = env.ALLOWED_ORIGIN || "*";
+    const allowedOrigin = resolveOrigin(request, env);
     const corsHeaders = {
       "Access-Control-Allow-Origin": allowedOrigin,
+      "Vary": "Origin",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Access-Control-Max-Age": "86400"
@@ -430,6 +697,12 @@ export default {
 
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
     if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
+
+    // Auth routing happens BEFORE the ANTHROPIC_API_KEY check below — sign-in must
+    // not depend on the chat feature being configured.
+    const path = new URL(request.url).pathname.replace(/\/+$/, "") || "/";
+    if (path.startsWith("/auth/")) return handleAuth(request, env, path, corsHeaders);
+
     if (!env.ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({ error: "Worker not configured: ANTHROPIC_API_KEY missing" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });

@@ -1,47 +1,51 @@
-/* auth.js — Google OAuth sign-in and token management.
-   Hybrid auth strategy (GitHub Pages + modern browsers block 3p cookies, so the
-   pure Token Client silent path falls back to a popup that load-time code can't
-   open). Two GIS clients work together:
-     1. On load, `google.accounts.id` (Sign-In) does a browser-native silent session
-        check. FedCM is its default behavior — there is no flag to toggle. If a
-        Google session exists, handleIdCredential fires; we then call the Token
-        Client with prompt: '' to mint the access token (no UI: consent was
-        previously granted for this client + scope).
-     2. If FedCM reports no session (skipped / notDisplayed / dismissed),
-        handleIdNotification reveals the Sign in button. googleSignIn() then
-        opens the consent flow on a real user gesture.
-     3. After the first token, a setTimeout 5 min before expiry calls
-        silentRefresh() (Token Client, prompt: 'none'). This runs *after* a
-        session is established, where the iframe path is more reliable.
-     4. setTimeout can be throttled in backgrounded tabs, so visibilitychange
-        re-checks expiry and refreshes proactively if inside the lead window.
-     5. The Sign in button is hidden in HTML and only revealed on a confirmed
-        no-session signal — so it never flashes before FedCM resolves.
-     6. 5s belt-and-braces: if no token by then, reveal the button anyway.
+/* auth.js — Google sign-in via the authorization-code flow, brokered by the Worker.
 
-   NETWORK RESILIENCE (added after users were bounced back to the login button by
-   brief connectivity drops). A failed token refresh is NOT a sign-out:
+   THE PROBLEM THIS REPLACES. The previous implementation used Google Identity
+   Services' *implicit* token flow: the browser asked GIS for an access token
+   directly. That flow issues no refresh token, so the only way back to a working
+   session after a page refresh was a silent re-auth through a hidden Google
+   iframe (One Tap / FedCM). Chrome and Safari block the third-party cookies that
+   path depends on, so it failed constantly and fell back to a popup that load-time
+   code isn't allowed to open — surfacing the "Sign in with Google" button several
+   times a day. No amount of retry logic could fix it, because an access token only
+   lives an hour and nothing was allowed to outlive the page.
+
+   HOW IT WORKS NOW.
+     1. Sign in redirects the whole page to Google (no iframe, no popup, no
+        third-party cookies involved — this is why it is reliable).
+     2. Google redirects back with a one-time `code`. We POST it to the Worker,
+        which holds the client secret and trades it for an access token AND a
+        refresh token.
+     3. The Worker keeps the refresh token in KV and hands back a random session
+        id. That id — and nothing else — goes in localStorage.
+     4. Every page load and every hourly expiry POSTs the session id to the Worker
+        and gets a fresh access token back. Completely silent, no Google UI.
+     5. The session id expires after SESSION_TTL_SECONDS (24h), so a real sign-in
+        happens at most once a day per device.
+
+   PKCE (code_verifier / code_challenge) is used even though the exchange is
+   server-side: the `code` travels through the browser's address bar, and PKCE is
+   what stops an intercepted code from being redeemable by anyone else.
+
+   NETWORK RESILIENCE. Preserved wholesale from the previous version, because the
+   failure it fixed is unrelated to the flow: a failed refresh is NOT a sign-out.
      a. Any refresh failure while the current token is still valid, or while the
-        browser reports offline, leaves the session intact — no button, no
-        "Not signed in". We just retry.
-     b. Retries use a backoff schedule instead of giving up. Previously the refresh
-        timer was only ever rescheduled from the SUCCESS path, so one failed attempt
-        meant no further attempts and the token silently died.
-     c. `online` / `offline` events drive reconnection, so recovery is immediate
-        rather than waiting out a backoff tick.
-     d. If the GIS script itself failed to load (offline at boot), we re-inject it
-        once connectivity is back — a CDN script tag doesn't retry itself. */
+        browser reports offline, leaves the session intact and just retries.
+     b. Retries use a backoff schedule that always reschedules itself, so one
+        failure can't leave the token to die unattended.
+     c. `online` / `offline` events drive recovery immediately instead of waiting
+        out a backoff tick.
+     d. Exactly ONE condition logs the user out: the Worker answering 401, which
+        means the session genuinely no longer exists. Every other error retries. */
 
 // Epoch millis when the current access token expires. 0 means "no valid token".
-// Kept in memory only — never persisted to localStorage (would leak credentials).
+// The access token itself is deliberately still memory-only — only the session id
+// is persisted, and that is useless to anyone without the Worker.
 let tokenExpiry = 0;
 // Buffer before expiry inside which we proactively refresh. Deliberately generous:
 // it's the window in which the backoff retries below get to run before the token
 // actually dies, so a several-minute outage never reaches the user as a re-login.
 const TOKEN_REFRESH_LEAD_MS = 10 * 60 * 1000;
-// Fallback delay: if silent refresh hasn't produced a token by this point, show the
-// Sign in button so the user can recover from a stalled GIS load.
-const SIGNIN_FALLBACK_MS = 5000;
 // Backoff for retrying a failed silent refresh. Climbs to 5 min and stays there —
 // an outage of any length eventually recovers on its own without user action.
 const AUTH_RETRY_DELAYS_MS = [5000, 15000, 30000, 60000, 120000, 300000];
@@ -49,6 +53,25 @@ let authRetryIndex = 0;
 // Set once denyAccess() runs. Hard-stops all retry machinery — without it the
 // backoff loop would keep re-minting tokens for a user we just locked out.
 let authDenied = false;
+// True once we've resolved identity for this page load. Gates the one-time
+// sign-in side effects so an hourly token refresh doesn't redo them.
+let authBootstrapped = false;
+
+// localStorage: the session id. sessionStorage: the in-flight PKCE values, which
+// must not outlive the redirect round-trip they belong to.
+const SESSION_KEY = 'maple_sid';
+const PKCE_VERIFIER_KEY = 'maple_pkce_verifier';
+const OAUTH_STATE_KEY = 'maple_oauth_state';
+
+function getSessionId() {
+  try { return localStorage.getItem(SESSION_KEY) || ''; } catch (e) { return ''; }
+}
+function setSessionId(sid) {
+  try { localStorage.setItem(SESSION_KEY, sid); } catch (e) {}
+}
+function clearSessionId() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+}
 
 // True while the token in hand is still usable. The distinction that matters:
 // "refresh failed" is only a sign-out if this is false.
@@ -91,237 +114,312 @@ function hideSignInButton() {
   if (btn) btn.style.display = 'none';
 }
 
-// The GIS bundle comes from a CDN via a plain <script> tag, which does not retry
-// itself. Boot with no connection and `google` stays undefined forever, leaving the
-// app permanently stuck at "sign in" even after the network returns. Re-injecting a
-// fresh tag is the only way back. Guarded so we never queue two at once.
-let gisReloadPending = false;
-function reloadGisScript() {
-  if (gisReloadPending || typeof google !== 'undefined') return;
-  gisReloadPending = true;
-  console.warn('[auth] GIS script missing — re-injecting from CDN');
-  const s = document.createElement('script');
-  s.src = 'https://accounts.google.com/gsi/client';
-  s.async = true; s.defer = true;
-  s.onload = function() { gisReloadPending = false; console.log('[auth] GIS script reloaded'); };
-  s.onerror = function() { gisReloadPending = false; console.warn('[auth] GIS script reload failed'); };
-  document.head.appendChild(s);
+// ===== PKCE HELPERS =====
+// crypto.subtle is https-only, which is fine (GitHub Pages is https) but means
+// these will throw on a plain-http local preview — sign in from https or from
+// localhost, which browsers treat as a secure context.
+function b64url(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function randomUrlSafe(numBytes) {
+  const a = new Uint8Array(numBytes);
+  crypto.getRandomValues(a);
+  return b64url(a);
+}
+async function sha256Challenge(verifier) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  return b64url(new Uint8Array(digest));
 }
 
-// Counts initAuth's 200ms polls so we can tell "GIS is still parsing" (normal, a few
-// ticks) from "the script never arrived" (needs re-injection).
-let gisWaitTicks = 0;
+// Strip the OAuth params off the address bar after a redirect back from Google.
+// Leaving `code` in the URL would mean a browser refresh re-POSTs a code that has
+// already been redeemed, which fails — and it puts a credential in history.
+function cleanOAuthParamsFromUrl() {
+  try {
+    const url = new URL(location.href);
+    ['code', 'state', 'scope', 'authuser', 'prompt', 'error', 'error_description'].forEach(p => url.searchParams.delete(p));
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (e) {}
+}
 
+// ===== BOOT =====
+// Called once from initApp(). Three mutually exclusive entry states: back from
+// Google with a code, holding a session id, or neither.
 function initAuth() {
-  if (typeof google === 'undefined' || !google.accounts) {
-    gisWaitTicks++;
-    // ~4s of waiting means the tag failed rather than being slow. Retry the fetch,
-    // but only when there's a network to fetch over — otherwise wait for 'online'.
-    if (gisWaitTicks % 20 === 0 && !isOffline()) reloadGisScript();
-    if (gisWaitTicks % 20 === 0) console.log('[auth] still waiting for GIS (' + gisWaitTicks + ' ticks, offline=' + isOffline() + ')');
-    setTimeout(initAuth, 200);
+  bootAuth().catch(function (e) {
+    console.error('[auth] boot failed', e);
+    setSync('', 'Not signed in');
+    showSignInButton();
+  });
+}
+
+async function bootAuth() {
+  const params = new URLSearchParams(location.search);
+
+  if (params.get('error')) {
+    // User hit "Cancel" on the consent screen, or Google rejected the request.
+    const err = params.get('error');
+    console.warn('[auth] returned from Google with error=' + err + ' desc=' + (params.get('error_description') || '-'));
+    cleanOAuthParamsFromUrl();
+    setSync('', 'Not signed in');
+    showSignInButton();
+    if (err !== 'access_denied') toast('Sign-in failed: ' + err, true);
     return;
   }
-  gisWaitTicks = 0;
-  // Browser-capability check for diagnostics — does NOT tell us whether GIS itself
-  // chose FedCM internally (that's not exposed), only whether the browser supports
-  // the underlying IdentityCredential API. Useful for triaging father's machine.
-  console.log('[auth] FedCM supported by browser: ' + ('IdentityCredential' in window));
-  console.log('[auth] initAuth: creating tokenClient');
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: cfg.clientId, scope: SCOPES,
-    callback: (resp) => {
-      if(resp.error) {
-        // Log the FULL response so the failure code/subtype is captured verbatim —
-        // we need this to distinguish immediate_failed (silent path expected to
-        // sometimes fail) from real bugs. Phase 3 fix selection depends on this.
-        console.warn('[auth] callback error=' + resp.error +
-          ' subtype=' + (resp.error_subtype || '-') +
-          ' description=' + (resp.error_description || '-') +
-          ' details=' + JSON.stringify(resp));
-        // Expected silent-failure codes: user has no active Google session, third-party
-        // cookies blocked, or the user dismissed an explicit popup. Surface the button
-        // without a toast — the popup attempt itself is enough signal to the user.
-        const silentFailureCodes = ['immediate_failed', 'popup_failed_to_open', 'popup_closed_by_user', 'access_denied'];
 
-        // A refresh that fails while the existing token is still good — or while the
-        // browser is offline — is a transient network problem, not a logout. Keep the
-        // session, keep the button hidden, and retry. This is the fix for "it asks me
-        // to log in again every time the connection drops".
-        if (hasLiveToken() || isOffline()) {
-          if (isOffline()) setSync('', 'Offline — will reconnect');
-          else setSync('connected', 'Connected');
-          scheduleAuthRetry('refresh failed (' + resp.error + ') but session still usable');
-          return;
-        }
-
-        // Genuinely no usable token. Show the button so the user CAN act, but keep
-        // retrying in the background — if this was a long outage and their Google
-        // session is still alive, we recover without them touching anything.
-        setSync('', 'Not signed in'); showSignInButton();
-        scheduleAuthRetry('refresh failed (' + resp.error + ') with no live token');
-        if (silentFailureCodes.indexOf(resp.error) === -1) {
-          toast('Sign-in failed: '+resp.error, true);
-        }
-        return;
-      }
-      accessToken = resp.access_token;
-      const expiresInSec = resp.expires_in || 3600;
-      tokenExpiry = Date.now() + expiresInSec * 1000;
-      console.log('[auth] callback success expires_in=' + expiresInSec + 's scope=' + (resp.scope || '-'));
-      authRetryIndex = 0;  // healthy again — next failure starts the backoff from scratch
-      hideSignInButton();
-      setSync('connected', 'Connected');
-      // Fetch the user's email to determine role (Prrithive / Sridharan / Unknown).
-      // SECURITY: fetchUserEmail now returns false for unauthorized users (and handles
-      // denial internally — revokes token, shows access-denied screen). We must only
-      // call pullAll if it returns true, otherwise we'd leak data to a denied user.
-      fetchUserEmail().then(function(allowed){
-        if (allowed) {
-          // Set the assignee filter to "My tasks" so each user lands on their own view.
-          // Done before pullAll so the first render uses the right filter.
-          if (typeof applyMyTasksDefault === 'function') applyMyTasksDefault();
-          pullAll();
-        }
-        // If !allowed, denyAccess() has already shown the block screen — do nothing.
-      }).catch(function(e){
-        // Should not happen — fetchUserEmail catches its own errors and denies access.
-        // But just in case, fail closed.
-        console.error('fetchUserEmail unexpectedly threw:', e);
-        denyAccess('(verification error)');
-      });
-      if(tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
-      const ms = Math.max(60000, expiresInSec * 1000 - TOKEN_REFRESH_LEAD_MS);
-      tokenRefreshTimer = setTimeout(silentRefresh, ms);
-    }
-  });
-  // Hybrid path: ask the Sign-In (ID) client to do a FedCM-based silent session
-  // check. On confirmed session → handleIdCredential mints the token via the
-  // Token Client. On no-session moments → handleIdNotification reveals the Sign
-  // in button. This replaces the on-load tokenClient.requestAccessToken({prompt:
-  // 'none'}) call that was getting popup-blocked under strict 3p-cookie rules.
-  if (google.accounts.id && typeof google.accounts.id.initialize === 'function') {
-    console.log('[auth] initAuth: configuring id client (FedCM session check)');
-    google.accounts.id.initialize({
-      client_id: cfg.clientId,
-      callback: handleIdCredential,
-      auto_select: true,
-      itp_support: true,
-    });
-    google.accounts.id.prompt(handleIdNotification);
-  } else {
-    // No id client available (very old GIS bundle or odd CDN failure). Best we
-    // can do is the legacy direct silent refresh, knowing it may popup-block.
-    console.warn('[auth] id client unavailable, falling back to direct silentRefresh');
-    silentRefresh();
+  if (params.get('code')) {
+    setSync('syncing', 'Signing in…');
+    await completeSignIn(params);
+    return;
   }
-  // Belt-and-braces: if neither the id callback nor the token callback has fired
-  // within a few seconds, reveal the Sign in button so a stalled GIS load /
-  // unsupported FedCM doesn't leave the user stuck.
-  setTimeout(function() {
-    if (accessToken) return;
-    if (isOffline()) {
-      // No point offering a login button that cannot possibly succeed. Sit on the
-      // cached data and let the 'online' handler drive recovery.
-      console.log('[auth] ' + SIGNIN_FALLBACK_MS + 'ms fallback: offline, showing cached data instead of Sign in');
-      setSync('', 'Offline — cached data');
+
+  if (getSessionId()) {
+    // The common path by far: an ordinary page load or refresh inside the 24h
+    // window. No Google round-trip, no UI — just trade the session id for a token.
+    console.log('[auth] existing session found, restoring silently');
+    setSync('syncing', 'Signing in…');
+    silentRefresh();
+    return;
+  }
+
+  console.log('[auth] no session — showing Sign in button');
+  if (isOffline()) {
+    // No point offering a login button that cannot possibly succeed. Sit on the
+    // cached data and let the 'online' handler drive recovery.
+    setSync('', 'Offline — cached data');
+    return;
+  }
+  setSync('', 'Not signed in');
+  showSignInButton();
+}
+
+// ===== STEP 1: leave for Google =====
+// Full-page redirect, on a real user gesture. Nothing here can be blocked by
+// popup or third-party-cookie policy, which is the whole point.
+async function googleSignIn() {
+  if (!cfg.clientId) { toast('Client ID not configured', true); return; }
+  try {
+    const verifier = randomUrlSafe(32);
+    const stateToken = randomUrlSafe(16);
+    // sessionStorage, not localStorage: these are single-use and scoped to the tab
+    // that started the flow, so a stale pair can never be replayed in another tab.
+    sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+    sessionStorage.setItem(OAUTH_STATE_KEY, stateToken);
+
+    const challenge = await sha256Challenge(verifier);
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+      client_id: cfg.clientId,
+      redirect_uri: OAUTH_REDIRECT_URI,
+      response_type: 'code',
+      scope: SCOPES,
+      // access_type=offline is what asks for a refresh token at all; prompt=consent
+      // is what makes Google actually return one on EVERY sign-in. Without the
+      // latter, Google omits the refresh token for an already-consented user and
+      // the new session would have nothing to refresh from.
+      access_type: 'offline',
+      prompt: 'consent',
+      include_granted_scopes: 'true',
+      state: stateToken,
+      code_challenge: challenge,
+      code_challenge_method: 'S256'
+    }).toString();
+
+    console.log('[auth] redirecting to Google (redirect_uri=' + OAUTH_REDIRECT_URI + ')');
+    location.assign(authUrl);
+  } catch (e) {
+    console.error('[auth] failed to start sign-in', e);
+    toast('Could not start sign-in', true);
+  }
+}
+
+// ===== STEP 2: back from Google, redeem the code =====
+async function completeSignIn(params) {
+  const code = params.get('code');
+  const returnedState = params.get('state');
+  const expectedState = sessionStorage.getItem(OAUTH_STATE_KEY);
+  const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+
+  // Single-use in every sense: clear them before doing anything that can fail, so
+  // a retry always starts a clean flow rather than reusing spent values.
+  sessionStorage.removeItem(OAUTH_STATE_KEY);
+  sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+  cleanOAuthParamsFromUrl();
+
+  if (!expectedState || !verifier || returnedState !== expectedState) {
+    // Either a forged callback, or a genuine one that landed in a tab which never
+    // started the flow (e.g. the link was reopened). Both are unusable.
+    console.warn('[auth] state/verifier mismatch — discarding callback');
+    setSync('', 'Not signed in');
+    showSignInButton();
+    toast('Sign-in could not be verified — please try again', true);
+    return;
+  }
+
+  let resp, data;
+  try {
+    resp = await fetch(AUTH_WORKER_URL + '/auth/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, code_verifier: verifier, redirect_uri: OAUTH_REDIRECT_URI })
+    });
+    data = await resp.json().catch(function () { return {}; });
+  } catch (e) {
+    console.error('[auth] /auth/exchange network failure', e);
+    setSync('error', 'Sign-in failed');
+    showSignInButton();
+    toast('Could not reach the sign-in service', true);
+    return;
+  }
+
+  if (!resp.ok) {
+    console.warn('[auth] /auth/exchange failed status=' + resp.status + ' body=' + JSON.stringify(data));
+    if (resp.status === 403) {
+      // The Worker's allowlist rejected this account. It already revoked the
+      // credentials, so there is nothing to clean up locally.
+      await denyAccess(data.email || '(unauthorized account)');
       return;
     }
-    console.warn('[auth] ' + SIGNIN_FALLBACK_MS + 'ms fallback fired: no token yet, revealing Sign in button');
+    setSync('error', 'Sign-in failed');
     showSignInButton();
-  }, SIGNIN_FALLBACK_MS);
-}
-
-// Fires when google.accounts.id confirms a Google session via FedCM (auto-select
-// returning user) or via an interactive One Tap selection. We do NOT decode or
-// store the JWT in `resp.credential` — its presence alone is the "session is
-// live" signal we need before asking the Token Client for an access token.
-// Calling requestAccessToken with prompt: '' here is the documented no-UI path:
-// since consent was previously granted for this client + scope, GIS mints the
-// token without showing anything. (If GIS DOES try a popup here — same failure
-// mode as today — Phase 3.1 will switch the Token Client to ux_mode: 'redirect'.
-// The follow-up is pre-approved per the working agreement.)
-function handleIdCredential(resp) {
-  console.log('[auth] id.callback: session confirmed, requesting access token (credential length=' + (resp && resp.credential ? resp.credential.length : 0) + ')');
-  if (!tokenClient) {
-    console.warn('[auth] id.callback fired before tokenClient ready — ignoring');
+    toast('Sign-in failed: ' + (data.error || resp.status), true);
     return;
   }
-  try { tokenClient.requestAccessToken({ prompt: '' }); }
-  catch(e) {
-    console.warn('[auth] requestAccessToken threw synchronously after id.callback', e);
-    showSignInButton();
-  }
+
+  console.log('[auth] session established for ' + (data.email || '(unknown)') +
+    ', valid ' + Math.round((data.session_ttl || 0) / 3600) + 'h');
+  setSessionId(data.sid);
+  adoptToken(data.access_token, data.expires_in);
 }
 
-// Called for every PromptMomentNotification from google.accounts.id.prompt().
-// We extract every documented method's value defensively (any of them can be
-// missing or throw on edge cases) and log the whole dump alongside a derived
-// `reason` string — per the spec, the named reason methods can return null and
-// we want full diagnostic detail if the hybrid path still fails.
-function handleIdNotification(n) {
-  function safeCall(fnName) {
-    try { return typeof n[fnName] === 'function' ? n[fnName]() : undefined; }
-    catch(e) { return '(threw:' + e.message + ')'; }
+// ===== STEP 3: the silent path — every load, every hourly expiry =====
+function silentRefresh() {
+  // Locked-out user — never re-mint. Must be first.
+  if (authDenied) { console.log('[auth] silentRefresh skipped — access denied'); return; }
+
+  const sid = getSessionId();
+  if (!sid) {
+    if (!hasLiveToken()) { setSync('', 'Not signed in'); showSignInButton(); }
+    return;
   }
-  const dump = {
-    momentType: safeCall('getMomentType'),
-    isDisplayMoment: safeCall('isDisplayMoment'),
-    isDisplayed: safeCall('isDisplayed'),
-    isNotDisplayed: safeCall('isNotDisplayed'),
-    notDisplayedReason: safeCall('getNotDisplayedReason'),
-    isSkippedMoment: safeCall('isSkippedMoment'),
-    skippedReason: safeCall('getSkippedReason'),
-    isDismissedMoment: safeCall('isDismissedMoment'),
-    dismissedReason: safeCall('getDismissedReason'),
-  };
-  let reason = '(unknown)';
-  if (dump.isDisplayMoment) reason = 'displayed';
-  else if (dump.isNotDisplayed) reason = 'notDisplayed:' + dump.notDisplayedReason;
-  else if (dump.isSkippedMoment) reason = 'skipped:' + dump.skippedReason;
-  else if (dump.isDismissedMoment) reason = 'dismissed:' + dump.dismissedReason;
-  console.log('[auth] id.prompt notification reason=' + reason + ' raw=' + JSON.stringify(dump));
-  // Only reveal the Sign in button on terminal "no session" moments. A display
-  // moment means the prompt UI is up; we wait for the credential callback.
-  // Offline, FedCM can't reach Google and always reports notDisplayed — that's a
-  // network verdict, not a session verdict, so don't act on it.
-  if (reason !== 'displayed' && !isOffline()) showSignInButton();
+
+  // Attempting the round-trip with no network just burns a retry slot and logs a
+  // scary error. Wait it out; the 'online' listener fires the moment we're back.
+  if (isOffline()) {
+    console.log('[auth] silentRefresh skipped — browser offline, waiting for reconnect');
+    setSync('', hasLiveToken() ? 'Offline — will reconnect' : 'Offline — cached data');
+    scheduleAuthRetry('offline');
+    return;
+  }
+
+  console.log('[auth] silentRefresh: exchanging session id for access token');
+  fetch(AUTH_WORKER_URL + '/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sid: sid })
+  }).then(async function (resp) {
+    const data = await resp.json().catch(function () { return {}; });
+
+    // 401 is the one and only genuine logout: the Worker is telling us this
+    // session no longer exists (24h expiry, revoked access, or Google killed the
+    // refresh token). Anything else is treated as transient and retried.
+    if (resp.status === 401) {
+      console.log('[auth] session expired — re-authentication required');
+      clearSessionId();
+      accessToken = null;
+      tokenExpiry = 0;
+      if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; }
+      setSync('', 'Session expired — sign in');
+      showSignInButton();
+      return;
+    }
+
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+
+    adoptToken(data.access_token, data.expires_in);
+  }).catch(function (e) {
+    console.warn('[auth] silentRefresh failed: ' + e.message);
+    // Not a sign-out. Report honestly and keep trying — the token we already hold
+    // (if any) stays valid and the app keeps working against it.
+    if (hasLiveToken()) setSync('connected', 'Connected');
+    else if (isOffline()) setSync('', 'Offline — cached data');
+    else setSync('', 'Reconnecting…');
+    scheduleAuthRetry('token refresh failed (' + e.message + ')');
+  });
 }
 
-// Belt-and-braces #2: setTimeout can be throttled when the tab is backgrounded, so the
-// 55-min refresh timer can fire after the token has already expired. Re-check on every
+// Everything that happens once a fresh access token is in hand, from either the
+// exchange or a refresh. Single place so both paths can't drift apart.
+function adoptToken(token, expiresInSec) {
+  if (!token) { scheduleAuthRetry('worker returned no access token'); return; }
+  accessToken = token;
+  const ttl = expiresInSec || 3600;
+  tokenExpiry = Date.now() + ttl * 1000;
+  authRetryIndex = 0;  // healthy again — next failure starts the backoff from scratch
+  console.log('[auth] access token adopted, expires in ' + ttl + 's');
+
+  hideSignInButton();
+  setSync('connected', 'Connected');
+
+  // Schedule the next refresh well before expiry, leaving room for the backoff
+  // retries to run inside the lead window if the first attempt fails.
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  tokenRefreshTimer = setTimeout(silentRefresh, Math.max(60000, ttl * 1000 - TOKEN_REFRESH_LEAD_MS));
+
+  // SECURITY: fetchUserEmail returns false for unauthorized users (and handles
+  // denial internally — revokes the session, shows the access-denied screen). We
+  // must only call pullAll if it returns true, otherwise we'd leak data.
+  fetchUserEmail().then(function (allowed) {
+    if (!allowed) return;  // denyAccess() has already shown the block screen
+    if (!authBootstrapped) {
+      authBootstrapped = true;
+      // Land each user on their own view. Deliberately only on the FIRST token of
+      // the page load — doing it on every hourly refresh would yank the filter
+      // back to "My tasks" underneath someone mid-task.
+      if (typeof applyMyTasksDefault === 'function') applyMyTasksDefault();
+    }
+    pullAll();
+  }).catch(function (e) {
+    // Should not happen — fetchUserEmail catches its own errors and denies access.
+    // But just in case, fail closed.
+    console.error('fetchUserEmail unexpectedly threw:', e);
+    denyAccess('(verification error)');
+  });
+}
+
+// ===== KEEPING THE SESSION ALIVE =====
+// setTimeout can be throttled when the tab is backgrounded, so the ~50-min refresh
+// timer can fire after the token has already expired. Re-check on every
 // visibility-restore event and refresh proactively if we're inside the lead window.
-document.addEventListener('visibilitychange', function() {
+document.addEventListener('visibilitychange', function () {
   if (document.visibilityState !== 'visible') return;
-  if (!tokenClient || !accessToken) return;
+  if (authDenied || !getSessionId()) return;
   const remainingMs = tokenExpiry - Date.now();
   if (remainingMs < TOKEN_REFRESH_LEAD_MS) {
-    console.log('[auth] visibilitychange: token expiring in ' + Math.round(remainingMs/1000) + 's, kicking silent refresh');
+    console.log('[auth] visibilitychange: token expiring in ' + Math.round(remainingMs / 1000) + 's, kicking silent refresh');
     silentRefresh();
   }
 });
 
-// ===== CONNECTIVITY RECOVERY =====
-// The backoff timer alone would eventually recover, but waiting up to 5 minutes after
-// the wifi is visibly back feels broken. These events make it immediate.
-window.addEventListener('online', function() {
+// The backoff timer alone would eventually recover, but waiting up to 5 minutes
+// after the wifi is visibly back feels broken. These events make it immediate.
+window.addEventListener('online', function () {
   console.log('[auth] browser reports online — attempting recovery');
   if (authDenied) return;
   authRetryIndex = 0;  // connectivity is a fresh start, not a continuation
-  if (typeof google === 'undefined') reloadGisScript();
+  if (!getSessionId()) { showSignInButton(); return; }
   if (hasLiveToken()) {
     // Session survived the outage intact. Just resync the data.
     setSync('connected', 'Connected');
     if (typeof pullAll === 'function') pullAll();
   } else {
-    // Token died during the outage. prompt:'none' mints a new one with no UI as long
-    // as the Google session is alive, so the user never sees a login prompt.
     if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; }
     silentRefresh();
   }
 });
 
-window.addEventListener('offline', function() {
+window.addEventListener('offline', function () {
   console.log('[auth] browser reports offline — holding session, pausing sync');
   if (authDenied) return;
   // Explicitly NOT clearing accessToken. The token is still valid; only the network
@@ -329,11 +427,12 @@ window.addEventListener('offline', function() {
   setSync('', 'Offline — cached data');
 });
 
-// Fetch the signed-in user's email from Google userinfo endpoint.
-// Requires the userinfo.email scope (added in config.js SCOPES).
-// SECURITY: If the email is not in USER_EMAILS, this function blocks access entirely
-// by revoking the token and showing the access-denied screen. The caller must check
-// the return value — true = allowed, false = denied (caller should NOT proceed).
+// ===== IDENTITY & ACCESS CONTROL =====
+// Fetch the signed-in user's email from Google's userinfo endpoint.
+// Requires the userinfo.email scope (see SCOPES in config.js).
+// SECURITY: If the email is not in USER_EMAILS, this blocks access entirely by
+// destroying the session and showing the access-denied screen. The caller must
+// check the return value — true = allowed, false = denied (do NOT proceed).
 async function fetchUserEmail() {
   if (!accessToken) return false;
   try {
@@ -348,10 +447,9 @@ async function fetchUserEmail() {
     console.log('Signed in as:', email, '→ role:', state.currentUser);
 
     // ===== ALLOWLIST ENFORCEMENT =====
-    // If the user isn't in USER_EMAILS, deny access. Revoke the token at Google's end
-    // (so cached tokens can't be reused via DevTools), clear local state, and show
-    // the access-denied screen. To grant a new user access, add them to USER_EMAILS
-    // in config.js — no code change needed here.
+    // If the user isn't in USER_EMAILS, deny access. To grant a new user access,
+    // add them to USER_EMAILS in config.js (and to ALLOWED_EMAILS on the Worker
+    // if you've set that) — no code change needed here.
     if (state.currentUser === 'Unknown') {
       console.warn('Access denied for', email);
       await denyAccess(email);
@@ -368,38 +466,40 @@ async function fetchUserEmail() {
   }
 }
 
-// Deny access for an unauthorized user. Revokes the OAuth token at Google's end
-// (so it can't be reused), clears local app state, and shows the access-denied screen.
+// Deny access for an unauthorized user. Destroys the server-side session (which
+// revokes the refresh token at Google), clears local state, and shows the
+// access-denied screen.
 async function denyAccess(email) {
   const tokenToRevoke = accessToken;
+  const sid = getSessionId();
   // Latch the denial BEFORE clearing state. The retry/backoff machinery checks this
   // flag; without it, the reconnect logic would happily mint a fresh token for the
   // user we're locking out.
   authDenied = true;
-  // Clear local state immediately so any in-flight code can't use the token.
   accessToken = null;
   tokenExpiry = 0;
   state.currentEmail = '';
   state.currentUser = 'Unknown';
+  clearSessionId();
   if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; }
 
-  // Revoke the token at Google's end. Best-effort — even if this fails, local
-  // state is already cleared and the access-denied screen blocks the UI.
+  // Kill the refresh token server-side, then the access token. Best-effort — local
+  // state is already cleared and the access-denied screen blocks the UI regardless.
+  if (sid) {
+    try {
+      await fetch(AUTH_WORKER_URL + '/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sid: sid })
+      });
+    } catch (e) { console.warn('Session logout failed (non-fatal):', e); }
+  }
   if (tokenToRevoke) {
     try {
-      // google.accounts.oauth2.revoke is the official client-side revoke API.
-      if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2 && google.accounts.oauth2.revoke) {
-        google.accounts.oauth2.revoke(tokenToRevoke, function() {});
-      } else {
-        // Fallback: hit the revoke endpoint directly.
-        await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(tokenToRevoke), { method: 'POST' });
-      }
-    } catch (e) {
-      console.warn('Token revoke failed (non-fatal):', e);
-    }
+      await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(tokenToRevoke), { method: 'POST' });
+    } catch (e) { console.warn('Token revoke failed (non-fatal):', e); }
   }
 
-  // Show the access-denied screen and hide the main app.
   const denied = document.getElementById('accessDenied');
   const app = document.getElementById('app');
   if (denied) {
@@ -411,54 +511,34 @@ async function denyAccess(email) {
   setSync('error', 'Access denied');
 }
 
-// Called by the "Sign out and try a different account" button on the access-denied screen.
-// Reloads the page so the user can sign in with a different Google account.
-function accessDeniedReload() {
-  // Clear any local cache too — an unauthorized user shouldn't see cached data
-  // (though they wouldn't have any unless they were previously authorized).
-  try { localStorage.removeItem('maple_cache'); } catch(e) {}
+// Explicit sign-out: end the session everywhere, not just in this tab. Without the
+// /auth/logout call the refresh token would stay live in KV until its TTL.
+async function signOut() {
+  const sid = getSessionId();
+  clearSessionId();
+  accessToken = null;
+  tokenExpiry = 0;
+  if (tokenRefreshTimer) { clearTimeout(tokenRefreshTimer); tokenRefreshTimer = null; }
+  if (sid) {
+    try {
+      await fetch(AUTH_WORKER_URL + '/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sid: sid })
+      });
+    } catch (e) {}
+  }
+}
+
+// Called by the "Sign out and try a different account" button on the access-denied
+// screen. denyAccess() has already torn down the session; this clears the cached
+// data an unauthorized user shouldn't retain and returns to a clean sign-in.
+async function accessDeniedReload() {
+  await signOut();
+  try { localStorage.removeItem('maple_cache'); } catch (e) {}
   location.reload();
 }
 
-// Strict silent refresh. `prompt: 'none'` instructs GIS to fail (with `immediate_failed`)
-// rather than show any UI when consent or session selection would be needed. That's
-// exactly what we want — silent on the happy path, no surprise popups, button shown
-// quietly on failure.
-function silentRefresh() {
-  // Locked-out user — never re-mint. Must be first.
-  if (authDenied) { console.log('[auth] silentRefresh skipped — access denied'); return; }
-  if(!tokenClient) {
-    console.warn('[auth] silentRefresh called before tokenClient ready — retrying');
-    scheduleAuthRetry('tokenClient not ready');
-    return;
-  }
-  // Attempting an OAuth round-trip with no network just burns a retry slot and logs
-  // a scary error. Wait it out; the 'online' listener fires the moment we're back.
-  if (isOffline()) {
-    console.log('[auth] silentRefresh skipped — browser offline, waiting for reconnect');
-    setSync('', 'Offline — will reconnect');
-    scheduleAuthRetry('offline');
-    return;
-  }
-  // FedCM=<bool> here reflects browser capability only. GIS doesn't expose
-  // whether it actually used the FedCM path internally vs. an iframe / popup —
-  // this log is for triage (e.g. if father's machine reports FedCM=false we
-  // know to check Chrome version / flags).
-  console.log('[auth] silentRefresh: using FedCM=' + ('IdentityCredential' in window) + ' (browser capability) at ' + new Date().toISOString());
-  try { tokenClient.requestAccessToken({ prompt: 'none' }); }
-  catch(e) {
-    console.warn('[auth] silentRefresh threw synchronously', e);
-    showSignInButton();
-  }
-}
-// Explicit Sign in from the button. We default to '' (GIS picks the best UX:
-// re-consent if scopes changed, otherwise account picker for first-time use).
-function googleSignIn() {
-  if(!tokenClient) { toast('Auth not ready, try again', true); return; }
-  const prompt = accessToken ? '' : 'consent';
-  console.log('[auth] googleSignIn: interactive request with prompt=' + (prompt || '(empty)'));
-  tokenClient.requestAccessToken({ prompt });
-}
 function setSync(s, text) {
   const el = document.getElementById('syncStatus');
   el.className = 'sync-status ' + s;

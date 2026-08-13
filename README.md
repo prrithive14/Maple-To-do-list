@@ -8,6 +8,57 @@ Google Sheets-backed CRM and task management web app for a family machinery part
 
 ---
 
+## ⚠️ DEPLOY — Once-a-day sign-in (built Aug 12, 2026)
+
+Sign-in moved from Google's **implicit token flow** to the **authorization-code flow with a refresh token**, brokered by the Cloudflare Worker. This is why: the implicit flow issues no refresh token, its access tokens die after an hour, and the only way to recover a session after a page refresh was a silent re-auth through a hidden Google iframe — which Chrome and Safari break by blocking third-party cookies. That's what produced the "Sign in with Google" button several times a day. Retry logic could never fix it; nothing was allowed to outlive the page.
+
+Now: the browser stores only a random **session id**; the Worker holds the client secret and the refresh token in KV. Page loads trade the session id for a fresh access token with no Google UI at all. A real sign-in happens **at most once per 24 hours per device**.
+
+**Deploy in this order — steps 1 and 2 must land BEFORE step 3, or sign-in breaks for everyone.**
+
+### 1. Google Cloud Console — add the redirect URI
+APIs & Services → Credentials → the OAuth 2.0 Client ID → **Authorised redirect URIs** → Add:
+
+```
+https://crm.maplempss.com/
+https://prrithive14.github.io/Maple-To-do-list/
+```
+
+Google matches these **byte for byte** — the trailing slash is significant. The front-end sends `location.origin + location.pathname` (with `index.html` stripped), so whichever domain you actually open must be in this list. Save; changes can take a few minutes to propagate.
+
+While you're here, copy the **Client secret** from the same client — step 2 needs it.
+
+### 2. Cloudflare Worker — KV namespace + secrets
+In the `maple-chat` Worker's **Settings → Variables and Secrets**:
+
+| Name | Kind | Value |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | Variable | the full client id (same one in `js/config.js`) |
+| `GOOGLE_CLIENT_SECRET` | **Secret** | the client secret from step 1 |
+| `ALLOWED_EMAILS` | Variable | `prrithive@gmail.com,sridharanbalaiyan@gmail.com,prrithive1@gmail.com,satyaveeravenkataramana17@gmail.com` |
+| `ALLOWED_ORIGIN` | Variable | `https://crm.maplempss.com,https://prrithive14.github.io` — comma-separated; **include every domain you open the app from** or CORS blocks sign-in there |
+| `SESSION_TTL_SECONDS` | Variable | *optional* — omit for the 24h default |
+
+Then **Storage & Databases → KV → Create namespace** named `maple-auth-sessions`, and bind it to the Worker under **Settings → Bindings** with the variable name **`AUTH_SESSIONS`** (that exact name — the code looks it up by it).
+
+### 3. Redeploy the worker, then push the frontend
+Paste `worker.js` into the Cloudflare editor and **Deploy** — it now routes `/auth/*` to the new broker and leaves the chat endpoint untouched. Then commit and push the frontend. Cache-busting is already bumped to `?v=20260812a`.
+
+### 4. Sanity check
+Open the app, sign in (you'll get the Google consent screen once), then **hard-refresh several times**. Expect no sign-in button at all, and this in the console:
+
+```
+[auth] existing session found, restoring silently
+[auth] access token adopted, expires in 3599s
+```
+
+`localStorage['maple_sid']` should hold an opaque random string — and nothing that looks like a Google token. Close the laptop overnight, reopen: one sign-in, then silent again.
+
+### Known caveat — the 7-day refresh token expiry
+**If the OAuth consent screen is still in "Testing" publishing status, Google force-expires refresh tokens after 7 days**, regardless of the 24h session TTL. The app handles it correctly (the Worker sees `invalid_grant`, drops the session, and the user signs in again), but to get the full behaviour move the consent screen to **Production** under APIs & Services → OAuth consent screen. Unverified + Production means an "Google hasn't verified this app" interstitial on the once-a-day consent, and a 100-user cap — both fine here.
+
+---
+
 ## ⚠️ DEPLOY — Daily/Strategic + Excel export (built May 19, 2026)
 
 The Daily vs Strategic `taskType` split and the Excel export are **code-complete**. The Sheet schema migration is **automatic** — no manual Sheet editing. **Deploy in this order:**
@@ -170,10 +221,14 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
 - Per-item notes + file uploads (`Visit Prep/<companyName>/<itemName>/`), countdown, lead rating, PDF export
 
 ### Archive
-- Manual archive only — tasks are never auto-archived. Done tasks drop off the kanban
-  board immediately (`DONE_KANBAN_DAYS = 0` in tasks.js — raise it to give them a grace
-  period) but stay in the Tasks sheet and remain visible in the calendar view (on their
-  date, or in the Unscheduled panel if they have none)
+- Manual archive only — tasks are never auto-archived. A Done task stays on the kanban
+  for one day (`DONE_KANBAN_DAYS` in tasks.js), then drops off the board but stays in the
+  Tasks sheet and remains visible in the calendar view (on its date, or in the Unscheduled
+  panel if it has none)
+- The countdown runs from `completedAt` (stamped by `stampCompletion()` in sheets.js when a
+  task enters Done), NOT `updatedAt` — otherwise editing a finished task would restart its
+  day and bounce it back onto the board. Blank on pre-migration rows; those fall back to
+  `updatedAt`
 - Restore from the Archive tab — status is preserved (it used to flip Done→Not started,
   which destroyed the record of completion; Settings → "Fix task statuses" repairs tasks
   affected by the old behaviour)
@@ -200,10 +255,12 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
 - Daily-Log tools ignore any `createdBy` in args and use the signed-in email server-side
 
 ### Auth & identity
-- Strict silent refresh on every load (`auth.js#silentRefresh`, `prompt: 'none'`); Sign-in button hidden until a confirmed failure or 5s fallback
-- Token refresh fires ~5 min before expiry; `visibilitychange` guard re-checks on tab focus
-- Nothing persisted — `accessToken`/`tokenExpiry` live in module memory only
-- `USER_EMAILS` in `config.js` is the single allowlist; unrecognized email → token revoked → "Access denied" screen
+- **Authorization-code flow with PKCE**, brokered by the Worker. Sign-in is a full-page redirect to Google — no iframe, no popup, so third-party-cookie policy can't break it. Google Identity Services is no longer loaded at all.
+- **Session lives 24h per device.** Worker `/auth/exchange` trades the one-time code for an access + refresh token, keeps the refresh token in KV, returns a random session id. `/auth/token` trades that id for a fresh access token on every page load and ~50 min into each hour. `/auth/logout` revokes and deletes.
+- **The browser never holds a long-lived credential.** `localStorage['maple_sid']` is an opaque random id, useless without the Worker; `accessToken`/`tokenExpiry` are still memory-only.
+- **Only HTTP 401 from the Worker logs a user out.** Every other failure (offline, Google blip, Worker 502) keeps the session and retries on a backoff that always reschedules itself — this is the fix for "a dropped connection bounced me to the login screen".
+- `openid` is in `SCOPES` because the Worker reads the email from the returned `id_token` (falls back to the userinfo endpoint if absent).
+- Two allowlists, both enforced: `ALLOWED_EMAILS` on the Worker blocks session creation server-side; `USER_EMAILS` in `config.js` blocks the UI. Unrecognized email → session destroyed, refresh token revoked → "Access denied" screen.
 - `state.currentUser` = role name; `state.currentEmail` = raw lowercased email
 
 ### Theme
@@ -222,14 +279,17 @@ Column lists must stay in sync between `js/config.js` and the Sheet header rows 
 The app is publicly reachable, but data is not. Three layers:
 
 1. **Sheet/Drive sharing** — shared *only* with the two primary emails. Anyone else gets `403` from the Google APIs. Verify periodically that neither resource is "Anyone with the link".
-2. **App-level allowlist** (`USER_EMAILS`) — app refuses to load data for unlisted users and revokes their OAuth token.
-3. **OAuth consent screen** — Testing mode limits sign-in to listed test users; Published lets anyone sign in (layers 1 & 2 still block them).
+2. **Worker allowlist** (`ALLOWED_EMAILS`) — an unlisted account never gets a session at all; the Worker revokes its tokens at Google before returning. This runs on the server, so unlike layer 3 it can't be edited away in DevTools.
+3. **App-level allowlist** (`USER_EMAILS`) — app refuses to load data for unlisted users and destroys their session.
+4. **OAuth consent screen** — Testing mode limits sign-in to listed test users; Published lets anyone sign in (layers 1–3 still block them).
 
-The OAuth Client ID is safe to be public — it's bound to authorized JavaScript origins.
+The OAuth Client ID is safe to be public. **The client secret is not** — it lives only as a Cloudflare Worker secret and must never appear in this repo or in `config.js`.
 
-**Quarterly checks:** Sheet share list, Drive folder share list, OAuth consent screen publishing status.
+**Tradeoff accepted when persistent sessions shipped:** `localStorage['maple_sid']` is a bearer credential, so an XSS on the app would let an attacker mint access tokens until the session expires (≤24h). It's the reason the refresh token is kept server-side rather than in the browser — the blast radius is one device-day, not permanent Drive/Sheets access. Revoke a single device by deleting its key from the `maple-auth-sessions` KV namespace.
 
-**To grant a new user:** add their email to `USER_EMAILS` in `config.js`, share the Sheet, share the Drive folder, (if consent screen in Testing mode) add as a test user. No other code changes.
+**Quarterly checks:** Sheet share list, Drive folder share list, OAuth consent screen publishing status, stale KV sessions.
+
+**To grant a new user:** add their email to `USER_EMAILS` in `config.js` **and** to `ALLOWED_EMAILS` on the Worker, share the Sheet, share the Drive folder, (if consent screen in Testing mode) add as a test user. No other code changes.
 
 ---
 

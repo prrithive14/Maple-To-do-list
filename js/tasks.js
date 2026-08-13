@@ -146,22 +146,30 @@ function getFilteredTasks() {
 // it stays in state.tasks and remains visible in the calendar view (on its date, or in
 // the Unscheduled panel if it has no date).
 //
-// 0 = hide completed tasks from the board immediately (current setting). Set to 1, 2, …
-// to give them a grace period on the board again — that's the only line to change.
-const DONE_KANBAN_DAYS = 0;
+// 1 = a completed task stays on the board for a day, then drops off. Set to 0 to hide
+// them the instant they're completed; raise it for a longer grace period.
+const DONE_KANBAN_DAYS = 1;
 
-// True for a completed task that should not appear on the kanban board.
+// When a task was completed. Prefers the completedAt stamp (written by stampCompletion()
+// on the Done transition) and falls back to updatedAt for rows predating that column.
+// The distinction matters: updatedAt moves on EVERY edit, so keying the countdown off it
+// meant editing a finished task reset its day and bounced it back onto the board.
+function completionTime(t) {
+  return t.completedAt || t.updatedAt || '';
+}
+
+// True for a completed task that should no longer appear on the kanban board.
 function isAgedDone(t) {
   if ((t.status || '') !== 'Done') return false;
-  // No grace period: every Done task is hidden the moment it's completed. Checked
-  // before the updatedAt guard below so tasks missing a timestamp are hidden too —
-  // otherwise old rows with no updatedAt would linger on the board forever.
+  // No grace period configured: hide it immediately. Checked before the timestamp guard
+  // so rows with no usable timestamp are hidden too.
   if (DONE_KANBAN_DAYS <= 0) return true;
-  // Age check uses updatedAt (when it was last touched, i.e. marked Done). Tasks with
-  // no updatedAt aren't aged out, since we can't tell how old they are.
-  if (!t.updatedAt) return false;
+  const done = completionTime(t);
+  // No timestamp at all — can't age it, so leave it on the board rather than vanishing
+  // something we can't reason about.
+  if (!done) return false;
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - DONE_KANBAN_DAYS);
-  return t.updatedAt < cutoff.toISOString();
+  return done < cutoff.toISOString();
 }
 
 function renderKanban() {
@@ -213,14 +221,16 @@ async function markAllTasksDone() {
     const lastRow = idRows.length + 1;  // +1 for the header row
     if (idRows.length === 0) { toast('No rows found in the Tasks sheet'); setSync('connected', 'Connected'); return; }
 
-    const statusCol = colLetter(TASK_COLS.indexOf('status') + 1);      // 'C'
-    const updatedCol = colLetter(TASK_COLS.indexOf('updatedAt') + 1);  // 'M'
+    const statusCol = colLetter(TASK_COLS.indexOf('status') + 1);        // 'C'
+    const updatedCol = colLetter(TASK_COLS.indexOf('updatedAt') + 1);    // 'M'
+    const doneCol = colLetter(TASK_COLS.indexOf('completedAt') + 1);     // 'R'
     const stamp = nowIso();
     const byId = {};
     state.tasks.forEach(t => { byId[t.id] = t; });
 
     const statusValues = [];
     const updatedValues = [];
+    const doneValues = [];
     idRows.forEach(row => {
       const id = row[0];
       const existing = byId[id];
@@ -229,16 +239,21 @@ async function markAllTasksDone() {
       // Only restamp rows we actually changed — otherwise this wipes the real
       // last-modified time on tasks that were already complete.
       updatedValues.push([alreadyDone && existing.updatedAt ? existing.updatedAt : stamp]);
+      // Same for completion time: an already-Done task keeps whenever it was really
+      // finished. Newly-completed ones are stamped now.
+      doneValues.push([alreadyDone ? (existing.completedAt || existing.updatedAt || stamp) : stamp]);
     });
 
     await sheetsBatchWrite([
       { range: `${SHEET_TABS.tasks}!${statusCol}2:${statusCol}${lastRow}`, values: statusValues },
       { range: `${SHEET_TABS.tasks}!${updatedCol}2:${updatedCol}${lastRow}`, values: updatedValues },
+      { range: `${SHEET_TABS.tasks}!${doneCol}2:${doneCol}${lastRow}`, values: doneValues },
     ]);
 
     // Mirror the same edit locally so the UI is correct without a full re-pull.
     state.tasks.forEach(t => {
-      if ((t.status || '') !== 'Done') { t.status = 'Done'; t.updatedAt = stamp; }
+      if ((t.status || '') !== 'Done') { t.status = 'Done'; t.updatedAt = stamp; t.completedAt = stamp; }
+      else if (!t.completedAt) { t.completedAt = t.updatedAt || stamp; }
     });
 
     // The kanban is now empty by definition — drop the user on the calendar so they
@@ -346,6 +361,7 @@ async function applyStatusFix() {
 
     const statusCol = colLetter(TASK_COLS.indexOf('status') + 1);
     const updatedCol = colLetter(TASK_COLS.indexOf('updatedAt') + 1);
+    const doneCol = colLetter(TASK_COLS.indexOf('completedAt') + 1);
     const stamp = nowIso();
     const data = [];
     const applied = [];
@@ -354,6 +370,9 @@ async function applyStatusFix() {
       if (!row) return;  // vanished from the sheet since load — skip rather than guess
       data.push({ range: `${SHEET_TABS.tasks}!${statusCol}${row}`, values: [['Done']] });
       data.push({ range: `${SHEET_TABS.tasks}!${updatedCol}${row}`, values: [[stamp]] });
+      // Without this the task would fall back to updatedAt, and the next edit to it
+      // would restart its one-day kanban countdown.
+      data.push({ range: `${SHEET_TABS.tasks}!${doneCol}${row}`, values: [[stamp]] });
       applied.push(id);
     });
     if (data.length === 0) { toast('None of the selected tasks were found in the sheet — try Force sync', true); setSync('connected', 'Connected'); return; }
@@ -361,7 +380,7 @@ async function applyStatusFix() {
     await sheetsBatchWrite(data);
     applied.forEach(id => {
       const t = state.tasks.find(x => x.id === id);
-      if (t) { t.status = 'Done'; t.updatedAt = stamp; }
+      if (t) { t.status = 'Done'; t.updatedAt = stamp; t.completedAt = stamp; }
     });
 
     const missed = ids.length - applied.length;

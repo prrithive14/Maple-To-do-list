@@ -4,15 +4,22 @@ const APP_CONFIG = {
   sheetId: '1sCWFN8QYJkB8VNd1WcdKZ5vRyps5qn3iI4AYZ-GfnA0',
   calendarId: 'primary'
 };
-const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
+// `openid` is required, not cosmetic: without it Google's token endpoint returns no
+// id_token, and the Worker reads the signed-in email from that id_token to enforce
+// its allowlist at session-creation time.
+const SCOPES = 'openid https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
 const SHEET_TABS = { companies: 'Companies', visits: 'Visits', tasks: 'Tasks', deleted: 'Deleted', visitprep: 'VisitPrep', documents: 'Documents', dailylog: 'DailyLog' };
 // Tasks sheet now includes review fields (columns N, O, P) + taskType (column Q).
 // taskType is APPENDED last so existing column positions never shift. Existing tasks
 // with empty values = "no review"; empty taskType is normalised to 'daily' on read.
-const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','taskType'];
+// completedAt is APPENDED after taskType for the same reason — never shift existing columns.
+// It records when a task actually entered 'Done', which updatedAt cannot: updatedAt moves on
+// every edit, so a completed task that got edited would restart its kanban countdown and
+// pop back onto the board. Blank on legacy rows; readers fall back to updatedAt.
+const TASK_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','taskType','completedAt'];
 // Deleted sheet mirrors Tasks + archive fields + same review fields so archived tasks keep their review history.
 // taskType is the LAST column (S) so it survives archive/restore without shifting archivedAt/archiveReason.
-const DELETED_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','archivedAt','archiveReason','taskType'];
+const DELETED_COLS = ['id','name','status','priority','date','duration','assignee','category','companyId','notes','links','createdAt','updatedAt','reviewer','reviewStatus','reviewHistory','archivedAt','archiveReason','taskType','completedAt'];
 // Task time-horizon split. 'daily' = short-horizon execution work; 'strategic' = longer-horizon planning/research.
 const TASK_TYPES = ['daily','strategic'];
 const COMPANY_COLS = ['id','name','industry','size','makes','address','contact','phone','email','website','linkedin','status','value','owner','lastInteraction','notes','createdAt','updatedAt'];
@@ -31,6 +38,19 @@ const LEARNING_SEED_CATEGORIES = ['Cold Call', 'Industry', 'Product', 'App Usage
 // still appear in the dropdown after the common ones, so existing tasks aren't affected.
 const COMMON_TASK_CATEGORIES = ['Admin', 'Personal', 'Sales', 'Learning', 'Marketing', 'Other'];
 const CHAT_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
+
+// ===== AUTH =====
+// Same Worker as the chat one — sign-in lives under /auth/*. It holds the OAuth
+// client secret and the refresh token so the browser never has to; see the header
+// comment in worker.js for the trust split.
+const AUTH_WORKER_URL = "https://maple-chat.prrithive.workers.dev";
+// Where Google sends the user back after consent. This string must appear
+// VERBATIM in the OAuth client's "Authorised redirect URIs" list in Google Cloud
+// Console — Google compares it byte for byte, so the trailing slash matters.
+// Derived from the current page rather than hardcoded so a preview deploy doesn't
+// silently send the production URI; `index.html` is stripped so /index.html and /
+// both resolve to the one registered value.
+const OAUTH_REDIRECT_URI = location.origin + location.pathname.replace(/index\.html$/, '');
 const MAPLE_ROOT_FOLDER_ID = '13fDkDLwTuHLtFS7TcpVATuWDQxmlDbmM';
 
 // User identity — maps OAuth email to role name. Used across the app for review workflow.

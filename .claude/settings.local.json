@@ -5,7 +5,9 @@
       "Bash(node --check js/tasks.js)",
       "Bash(node --check js/archive.js)",
       "Bash(node --check js/sheets.js)",
-      "Bash(node --check js/auth.js)"
+      "Bash(node --check js/auth.js)",
+      "Bash(grep -v \"reviewStatus\\\\|archiveReason\\\\|//\")",
+      "Bash(node --check js/config.js)"
     ]
   }
 }
