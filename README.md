@@ -314,6 +314,20 @@ The OAuth Client ID is safe to be public. **The client secret is not** — it li
 
 ---
 
+## Known issues (found, deliberately not fixed)
+
+### Settings changes don't survive a reload — `loadConfig()` is dead code
+`loadConfig()` (`state.js:128`) reads `localStorage['maple_cfg']` back into `cfg`, but **nothing ever calls it** — `initApp()` doesn't, and neither does anything else. So:
+
+- `saveSettings()` / `saveSetup()` mutate `cfg` in memory and persist to `maple_cfg` via `saveConfig()`, and the UI toasts *"Settings saved — sign in again to apply"* — but on the next reload `cfg` is re-initialised from `{ ...APP_CONFIG }` (`state.js:33`) and the saved value is silently discarded. The Settings modal effectively does nothing across reloads.
+- **Do not "fix" this by simply calling `loadConfig()` at boot.** It assigns the parsed object wholesale rather than merging over `APP_CONFIG`, so a stale or partial `maple_cfg` (one saved with a blank field, or from before a key existed) would set `cfg.clientId` to `undefined` — which now hard-fails sign-in at `auth.js:202` with "Client ID not configured". Any real fix has to merge onto `APP_CONFIG` and validate, not replace.
+
+Not currently user-visible, because `APP_CONFIG` in `config.js` is authoritative and correct. Logged Aug 12, 2026 while working on the auth deploy; left alone deliberately to keep that change isolated.
+
+**Also note:** `cfg` is declared exactly once, at `state.js:33`. `config.js` must NOT declare it too — both files load as classic `<script>` tags sharing one global lexical scope, so a second top-level declaration is a `SyntaxError: Identifier 'cfg' has already been declared`, `state.js` never executes, and the whole app white-screens. It must also stay `let`, not `const`: `loadConfig()` and `saveSetup()` both reassign it.
+
+---
+
 ## Backlog / on the horizon
 
 - "Your Plate" dashboard panel: deliberately left untouched by the Daily/Strategic work — revisit once the split has been used for a while (may want a daily-vs-strategic breakdown there)
